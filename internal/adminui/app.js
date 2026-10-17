@@ -20,6 +20,16 @@ const settingLabels = {
   concurrent_uploads: ["Concurrent uploads", "Service-wide admission limit."],
   temporary_upload_bytes: ["Temporary upload budget in bytes", "Must accommodate the maximum file size."]
 };
+// Server-side bounds from the admin settings handler, mirrored for early feedback.
+const settingMax = {message_count: 100000, body_codepoints: 1000000, file_bytes: 1073741824, file_count: 100000, claim_seconds: 86400, claim_batch: 1000, page_size: 1000, direct_recipients: 100, group_members: 1000, groups_owned: 1000, concurrent_uploads: 32, temporary_upload_bytes: 4294967296};
+const settingGroups = [
+  ["Retention", "Messages and attachments share one lifetime. Lower limits also remove existing content that exceeds them.", ["message_count", "file_count"]],
+  ["Message and file size", "", ["body_codepoints", "file_bytes"]],
+  ["Claims and paging", "", ["claim_seconds", "claim_batch", "page_size"]],
+  ["Membership and capacity", "", ["direct_recipients", "group_members", "groups_owned", "concurrent_uploads", "temporary_upload_bytes"]]
+];
+// Lowering these deletes stored content (see the server's retention pass).
+const destructiveSettings = ["message_count", "body_codepoints", "file_bytes", "file_count"];
 // Message descriptors retain their meaning when the language changes. Never
 // translate user-supplied names, metadata, IDs or credentials.
 function setMessage(node, key, params = {}) {
@@ -119,9 +129,18 @@ function route() {
     else a.removeAttribute("aria-current");
   });
 }
-function ask(title, description, action, {danger = false, subject = ""} = {}) {
+function ask(title, description, action, {danger = false, subject = "", changes = []} = {}) {
   setMessage($("#confirm-title"), title);
   $("#confirm-subject").textContent = subject; $("#confirm-subject").hidden = !subject;
+  $("#confirm-changes").replaceChildren(...changes.map(change => {
+    const item = el("li", undefined, change.lowered ? "lowered" : "");
+    const name = el("span"); setMessage(name, settingLabels[change.name][0]);
+    const values = el("span", undefined, "values"); setMessage(values, "{old} → {new}", {old: change.old, new: change.new});
+    item.append(name, values);
+    if (change.lowered) { const flag = el("span", undefined, "flag"); setMessage(flag, "Lowered"); item.append(flag); }
+    return item;
+  }));
+  $("#confirm-changes").hidden = !changes.length;
   setMessage($("#confirm-description"), description);
   setMessage($("#confirm-action"), title);
   $("#confirm-action").className = danger ? "danger" : "primary";
@@ -262,6 +281,7 @@ function filtered(name, items, text) {
   if (items.length && !shown.length) setMessage(empty, "No results match the filter."); else setMessage(empty, empty.dataset.emptyKey);
   empty.hidden = shown.length > 0;
   section.querySelector("table").hidden = shown.length === 0;
+  section.querySelector(".toolbar").hidden = items.length === 0;
   return shown;
 }
 function renderLists() {
@@ -314,24 +334,107 @@ function renderLists() {
   }));
 }
 function render() {
-  const hosts = state.hosts || [];
-  const agents = state.agents || [];
-  const groups = state.groups || [];
+  const hosts = state.hosts || [], agents = state.agents || [], groups = state.groups || [];
+  const disabledHosts = hosts.filter(host => !host.enabled), disabledAgents = agents.filter(agent => !agent.enabled);
   setNumber($("#host-count"), hosts.length);
-  setNumber($("#agent-count"), agents.filter(a => a.enabled).length);
+  setNumber($("#agent-count"), agents.length);
   setNumber($("#group-count"), groups.length);
+  for (const [node, items, disabled] of [[$("#host-note"), hosts, disabledHosts], [$("#agent-note"), agents, disabledAgents]]) {
+    if (!items.length) clearMessage(node);
+    else setMessage(node, disabled.length ? "Disabled: {count}" : "All enabled", {count: disabled.length});
+    node.classList.toggle("warn", disabled.length > 0);
+  }
+  $("#setup-panel").hidden = hosts.length > 0 && agents.length > 0;
+  $("#setup-host").classList.toggle("done", hosts.length > 0);
+  $("#setup-agent").classList.toggle("done", agents.length > 0);
+  renderAttention(hosts, agents, disabledHosts);
   const cleanup = state.cleanup || {};
   setMessage($("#cleanup-summary"), cleanup.pending_files ? "Files awaiting deletion: {count}." : "No files awaiting deletion.", {count: cleanup.pending_files || 0});
   const cleanupErrors = {"physical file deletion failed": "cleanup.physical", "staging cleanup failed": "cleanup.staging", "unreferenced file cleanup failed": "cleanup.orphan"};
   if (cleanup.last_error) setMessage($("#cleanup-error"), cleanupErrors[cleanup.last_error] || "cleanup.generic");
   else clearMessage($("#cleanup-error"));
+  setNumber($("#overview-revision"), state.settings.revision || 1);
   renderLists();
-  $("#settings-fields").replaceChildren(...Object.entries(settingLabels).filter(([name]) => name in state.settings).map(([name, [label, help]]) => {
-    const wrap = el("div"); const lbl = el("label"); setMessage(lbl, label); lbl.htmlFor = `setting-${name}`;
-    const input = el("input"); input.type = "number"; input.id = `setting-${name}`; input.name = name; input.value = state.settings[name]; input.min = name === "file_count" ? "0" : "1"; input.step = "1"; input.required = true;
-    const hint = el("p"); setMessage(hint, help); hint.id = `help-${name}`; input.setAttribute("aria-describedby", hint.id); wrap.append(lbl, input, hint); return wrap;
-  }));
+  renderSettings();
+}
+function renderAttention(hosts, agents, disabledHosts) {
+  const off = new Set(disabledHosts.map(host => host.id));
+  const items = [
+    ...byName(disabledHosts).map(host => ["Host {name} is disabled.", host.name, "#hosts", "Manage hosts"]),
+    ...byName(agents.filter(agent => !agent.enabled)).map(agent => ["Agent {name} is disabled.", agent.name, "#agents", "Manage agents"]),
+    ...byName(agents.filter(agent => agent.enabled && off.has(agent.host_id))).map(agent => ["Agent {name} cannot authenticate because its host is disabled.", agent.name, "#hosts", "Manage hosts"]),
+    ...byName(agents.filter(agent => agent.enabled && !off.has(agent.host_id) && !agent.last_access)).map(agent => ["Agent {name} has not accessed the service yet.", agent.name, "#agents", "Manage agents"])
+  ];
+  const limit = 6, list = items.slice(0, limit).map(([key, name, href, link]) => {
+    const item = el("li"), text = el("span"); setMessage(text, key, {name});
+    const anchor = el("a"); anchor.href = href; setMessage(anchor, link);
+    item.append(text, anchor); return item;
+  });
+  if (items.length > limit) { const more = el("li", undefined, "more"); setMessage(more, "And {count} more.", {count: items.length - limit}); list.push(more); }
+  $("#attention-list").replaceChildren(...list);
+  $("#attention-list").hidden = !items.length;
+  $("#attention-empty").hidden = items.length > 0;
+}
+function formatHint(name, value) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const locale = i18n.getLocale();
+  if (name.endsWith("bytes") && value >= 1024) {
+    const [size, unit] = value >= 1 << 30 ? [value / (1 << 30), "GiB"] : value >= 1 << 20 ? [value / (1 << 20), "MiB"] : [value / 1024, "KiB"];
+    return `= ${new Intl.NumberFormat(locale, {maximumFractionDigits: 1}).format(size)} ${unit}`;
+  }
+  if (name === "claim_seconds" && value >= 60) {
+    const [size, unit] = value >= 3600 ? [value / 3600, "hour"] : [value / 60, "minute"];
+    return `= ${new Intl.NumberFormat(locale, {style: "unit", unit, unitDisplay: "long", maximumFractionDigits: 1}).format(size)}`;
+  }
+  return "";
+}
+let settingsBaseline = {};
+function settingChanges() {
+  return [...$("#settings-fields").querySelectorAll("input")]
+    .filter(input => input.value !== "" && Number(input.value) !== settingsBaseline[input.name])
+    .map(input => ({name: input.name, old: settingsBaseline[input.name], new: Number(input.value), lowered: destructiveSettings.includes(input.name) && Number(input.value) < settingsBaseline[input.name]}));
+}
+function updateSettingsState() {
+  const changes = settingChanges(), changed = new Set(changes.map(change => change.name));
+  $("#settings-fields").querySelectorAll("input").forEach(input => {
+    const wrap = input.closest(".field"), was = wrap.querySelector(".was");
+    wrap.classList.toggle("changed", changed.has(input.name));
+    if (changed.has(input.name)) setMessage(was, "Was {value}", {value: settingsBaseline[input.name]}); else clearMessage(was);
+    was.hidden = !changed.has(input.name);
+    wrap.querySelector(".unit-hint").textContent = formatHint(input.name, Number(input.value));
+  });
+  setMessage($("#settings-dirty"), changes.length ? "Unsaved changes: {count}" : "No unsaved changes", {count: changes.length});
+  $("#settings-form").classList.toggle("dirty", changes.length > 0);
+  $("#settings-discard").disabled = !changes.length;
+  $("#settings-form").querySelector('[type="submit"]').disabled = !changes.length;
+}
+function renderSettings() {
+  const fields = $("#settings-fields");
+  // Keep unsaved edits across refreshes; rebuild only when nothing is pending.
+  if (!fields.querySelector("input") || !settingChanges().length) {
+    fields.replaceChildren(...settingGroups.map(([legend, description, names]) => {
+      const set = el("fieldset", undefined, "panel setting-group");
+      const title = el("legend"); setMessage(title, legend); set.append(title);
+      if (description) { const note = el("p", undefined, "group-note"); setMessage(note, description); set.append(note); }
+      const grid = el("div", undefined, "settings-grid");
+      for (const name of names.filter(name => name in state.settings)) {
+        const [labelKey, help] = settingLabels[name];
+        const wrap = el("div", undefined, "field"), lbl = el("label"); setMessage(lbl, labelKey); lbl.htmlFor = `setting-${name}`;
+        const row = el("div", undefined, "input-row");
+        const input = el("input"); input.type = "number"; input.inputMode = "numeric"; input.id = `setting-${name}`; input.name = name; input.value = state.settings[name];
+        input.min = name === "file_count" ? "0" : "1"; input.max = String(settingMax[name]); input.step = "1"; input.required = true;
+        const unit = el("span", undefined, "unit-hint"); unit.setAttribute("aria-hidden", "true");
+        row.append(input, unit);
+        const hint = el("p", undefined, "help"); setMessage(hint, help); hint.id = `help-${name}`; input.setAttribute("aria-describedby", hint.id);
+        const was = el("p", undefined, "was"); was.hidden = true;
+        wrap.append(lbl, row, was, hint); grid.append(wrap);
+      }
+      set.append(grid); return set;
+    }));
+  }
+  settingsBaseline = {...state.settings};
   setMessage($("#settings-revision"), "Settings revision {revision}", {revision: state.settings.revision || 1});
+  updateSettingsState();
 }
 async function reload() { state = await api("state"); refreshedAt = new Date(); render(); showRefreshed(); }
 function editHost(host) {
@@ -392,13 +495,21 @@ $("#agent-form").addEventListener("submit", event => {
     if (result.api_key) keyResult(result.api_key, result.agent); else notice("Agent updated.");
   });
 });
+$("#settings-form").addEventListener("input", updateSettingsState);
+$("#settings-discard").addEventListener("click", () => {
+  $("#settings-fields").querySelectorAll("input").forEach(input => { input.value = settingsBaseline[input.name]; input.setCustomValidity(""); });
+  updateSettingsState();
+});
 $("#settings-form").addEventListener("submit", event => {
   event.preventDefault(); const form = event.currentTarget;
   if (!form.reportValidity()) return;
   const settings = {...state.settings};
   for (const [name] of Object.entries(settingLabels)) if (form.elements[name]) settings[name] = Number(form.elements[name].value);
   if (Object.entries(settings).some(([name, value]) => name !== "revision" && (!Number.isSafeInteger(value) || value < (name === "file_count" ? 0 : 1)))) { notice("Use whole numbers within the permitted limits.", true); return; }
-  ask("Save limits", "These limits apply to all channels and to existing content. Messages and files that exceed the new limits will be deleted.", async () => { await api("settings", "PUT", settings); await reload(); notice("Limits saved. Retention cleanup applied."); });
+  const changes = settingChanges();
+  if (!changes.length) return;
+  const deletes = changes.some(change => change.lowered);
+  ask("Save limits", deletes ? "These limits apply to all channels and to existing content. Messages and files that exceed the new limits will be deleted." : "This change does not delete stored content. It applies to all channels.", async () => { await api("settings", "PUT", settings); await reload(); notice(deletes ? "Limits saved. Retention cleanup applied." : "Limits saved."); }, {danger: deletes, changes});
 });
 $("#confirm-form").addEventListener("submit", event => {
   event.preventDefault(); const action = confirmAction; confirmAction = undefined;
@@ -457,7 +568,8 @@ window.addEventListener("agentpost:languagechange", () => {
   document.querySelectorAll("[data-relative]").forEach(node => { node.textContent = relativeTime(node.dataset.relative); node.title = i18n.formatDate(node.dataset.relative); });
   document.querySelectorAll("[data-aria-key]").forEach(node => node.setAttribute("aria-label", t(node.dataset.ariaKey, node._ariaParams || {})));
   showRefreshed();
-  document.querySelectorAll("#host-count, #agent-count, #group-count").forEach(node => { if (node._i18nNumber !== undefined) node.textContent = i18n.formatNumber(node._i18nNumber); });
+  document.querySelectorAll(".unit-hint").forEach(node => { const input = node.previousElementSibling; node.textContent = formatHint(input.name, Number(input.value)); });
+  document.querySelectorAll("#host-count, #agent-count, #group-count, #overview-revision").forEach(node => { if (node._i18nNumber !== undefined) node.textContent = i18n.formatNumber(node._i18nNumber); });
   document.querySelectorAll("[data-i18n]").forEach(node => { if (node._supportCode) node.textContent += ` ${t("Support code: {code}", {code: node._supportCode})}`; });
   document.querySelectorAll("input, select, textarea").forEach(control => { if (control.validity.customError) localizeValidity(control); });
 });

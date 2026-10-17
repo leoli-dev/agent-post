@@ -118,14 +118,30 @@ async function main() {
     await page.locator('#confirm-action').click();
     await page.locator('#agent-rows .status:not(.off)').waitFor();
     await page.getByRole('link', { name: 'Limits & retention', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Save limits', exact: true }).isDisabled(), true, 'saving is disabled without changes');
+    await page.getByLabel('Claim duration in seconds', { exact: true }).fill('120');
+    assert.equal((await page.locator('#settings-dirty').textContent()).trim(), 'Unsaved changes: 1');
+    assert.equal((await page.locator('#setting-claim_seconds + .unit-hint').textContent()).trim(), '= 2 minutes', 'durations show a readable equivalent');
+    await page.getByRole('button', { name: 'Save limits', exact: true }).click();
+    assert.equal(await page.locator('#confirm-action').getAttribute('class'), 'primary', 'raising a non-retention limit is not destructive');
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+    assert.equal(await page.getByLabel('Claim duration in seconds', { exact: true }).inputValue(), '60', 'discard restores saved values');
     await page.getByLabel('Messages per channel', { exact: true }).fill('12');
     await page.getByRole('button', { name: 'Save limits', exact: true }).click();
+    assert.equal(await page.locator('#confirm-action').getAttribute('class'), 'danger', 'lowering retention is destructive');
+    const change = (await page.locator('#confirm-changes li').allTextContents()).join('|');
+    assert.ok(change.includes('Messages per channel') && change.includes('100 → 12') && change.includes('Lowered'), `confirmation lists the change: ${change}`);
     await page.locator('#confirm-action').click();
     await page.getByText('Settings revision 2', { exact: true }).waitFor();
     await page.reload();
     await page.getByLabel('Messages per channel', { exact: true }).waitFor();
     assert.equal(await page.getByLabel('Messages per channel', { exact: true }).inputValue(), '12');
     await page.getByRole('link', { name: 'Overview', exact: true }).click();
+    const attention = (await page.locator('#attention-list li').allTextContents()).join('|');
+    assert.ok(attention.includes('Agent fixture-agent has not accessed the service yet.'), `overview lists agents needing attention: ${attention}`);
+    assert.equal(await page.locator('#setup-panel').isVisible(), false, 'setup checklist hides once hosts and agents exist');
+    assert.equal((await page.locator('#host-count').textContent()).trim(), '5');
     if (process.env.AGENT_POST_SCREENSHOT_DIR) {
       await fs.mkdir(process.env.AGENT_POST_SCREENSHOT_DIR, { recursive: true });
       await page.screenshot({ path: path.join(process.env.AGENT_POST_SCREENSHOT_DIR, 'admin-desktop.png'), fullPage: true });
@@ -149,7 +165,7 @@ async function main() {
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await page.getByLabel('Administrator password').waitFor();
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ browser: await browser.version(), viewport: [1440, 390], passed: ['login', 'hosts', 'stable row order', 'dialog initial focus', 'agents', 'filter, sort and status filter', 'key copy', 'keyboard row menus', 'key rotation and old-key rejection', 'disable and enable', 'settings', 'session reload', 'mobile cards and action sheet', 'logout'], pageErrors: errors }));
+    console.log(JSON.stringify({ browser: await browser.version(), viewport: [1440, 390], passed: ['login', 'hosts', 'stable row order', 'dialog initial focus', 'agents', 'filter, sort and status filter', 'key copy', 'keyboard row menus', 'key rotation and old-key rejection', 'disable and enable', 'settings diff, discard and danger confirmation', 'overview attention', 'session reload', 'mobile cards and action sheet', 'logout'], pageErrors: errors }));
   } finally {
     if (browser) await browser.close();
     if (server.pid && server.exitCode === null) server.kill('SIGTERM');
