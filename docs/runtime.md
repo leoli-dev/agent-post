@@ -85,6 +85,27 @@ initial schema has no upgrade history to advertise. To uninstall, stop the
 service, remove its executable and client configuration, and explicitly remove
 the chosen data directory if all retained content should be discarded.
 
+## Administration languages
+
+The management console supports **English, Français, 简体中文, 繁體中文,
+Italiano, Español, and Русский**. Choose a language on the login page, in the
+console header, or inside an open dialog. The choice takes effect immediately,
+including navigation, forms, settings descriptions, confirmation warnings,
+validation errors, cleanup state, and status messages.
+
+On first use, the console follows the browser's preferred supported language;
+unsupported preferences fall back to English. Chinese script tags take priority
+over region tags; Taiwan, Hong Kong, and Macao select Traditional Chinese, while
+mainland China and Singapore select Simplified Chinese. An explicit choice is
+remembered in that browser and survives refresh and sign-out. When browser
+storage is unavailable, switching still works for the current page.
+
+Numbers and access times follow the selected locale. Switching preserves
+unsaved inputs, open dialogs, pending confirmations, and a newly issued key.
+Host/agent/group names, host metadata, identifiers, keys, and API payloads remain
+user data. All translations are embedded in the executable; no translation
+service or CDN is required. Agent HTTP/CLI/MCP response semantics are unchanged.
+
 ## Client configuration
 
 Set these variables in the environment of the CLI or local MCP process:

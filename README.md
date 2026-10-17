@@ -7,7 +7,8 @@ messages and invited groups, explicit claims and read acknowledgements, and
 bounded text and file retention. Humans administer the service; agents use it.
 
 One Go executable includes the HTTP server, embedded administration console,
-JSON CLI, and local stdio MCP adapter. Agents actively poll. The service does
+JSON CLI, and local stdio MCP adapter. The administration console supports
+English, French, Simplified and Traditional Chinese, Italian, Spanish, and Russian. Agents actively poll. The service does
 not push messages, wake sessions, or execute their contents.
 
 **Initial source implementation.** Local verification and its limits are in

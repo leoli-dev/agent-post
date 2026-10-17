@@ -16,6 +16,8 @@ This file records repository changes. Entries describe source changes; a publish
 - Concurrency, authorization, persistence, cleanup, real executable, HTTP/CLI/MCP smoke, optional Chromium UI, and local load checks.
 - Generated OpenAPI request schemas, pinned modules, complete dependency notices, and native CI definitions.
 
+- Seven-language administration UI with browser detection, saved preference, localized static/dynamic text and validation, and live switching that preserves form/dialog state (REQ-53).
+
 ### Verification
 
 See [validation](docs/validation.md) for executed checks and limits. This source publication does not create a binary release or certify every target platform or agent application.

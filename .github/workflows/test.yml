@@ -66,5 +66,6 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/agent-post-ui-tools/node_modules
         run: |
+          node --test internal/adminui/i18n.test.cjs
           node scripts/browser-smoke.cjs
           node scripts/browser-i18n-smoke.cjs

@@ -52,7 +52,9 @@ async function main() {
     };
     const switchInPlace = async locale => {
       const before = requests.length;
-      await page.evaluate(value => window.AgentPostI18n.setLocale(value), locale);
+      const dialogPicker = page.locator('dialog[open] [data-i18n-language]');
+      if (await dialogPicker.count()) await dialogPicker.first().selectOption(locale);
+      else await page.locator('[data-i18n-language]:visible').first().selectOption(locale);
       await page.waitForFunction(value => document.documentElement.lang === value, locale);
       assert.equal(requests.length, before, 'language switching never sends an admin request');
     };
@@ -69,6 +71,9 @@ async function main() {
       loginByLocale[locale] = await page.locator('#login-form button[type=submit]').textContent();
       assert.equal(loginByLocale[locale].trim(), loginLabels[locale], `${locale}: localized login label`);
       assert.equal(await page.locator('[data-i18n-language]:visible option').count(), 7);
+      await page.locator('#password').fill('');
+      await page.locator('#login-form button[type=submit]').click();
+      assert.equal(await page.locator('#password').evaluate(node => node.validationMessage), await page.evaluate(() => window.AgentPostI18n.t('validation.required')), 'native required-field feedback follows the selected language');
       await page.locator('#password').fill('synthetic-wrong-password');
       await page.locator('#login-form button[type=submit]').click();
       await page.waitForFunction(() => document.querySelector('#login-error').textContent.trim().length > 0);
@@ -78,7 +83,7 @@ async function main() {
       await page.locator('a[data-page=hosts]').click();
       await page.locator('#new-host').click();
       hostLabelByLocale[locale] = await page.locator('label[for=host-name]').textContent();
-      const name = `fixture-${locale} <b>plain text</b>`;
+      const name = locale === 'en' ? 'Hosts' : `fixture-${locale} <b>plain text</b>`;
       await page.locator('#host-name').fill(name);
       await page.locator('#host-os').fill('Synthetic OS');
       await page.locator('#host-ips').fill('not-an-ip');
@@ -88,8 +93,9 @@ async function main() {
       await page.locator('#host-ips').fill('127.0.0.1');
       await page.locator('#host-form button[type=submit]').click();
       await page.locator('#host-dialog').waitFor({ state: 'hidden' });
-      await page.locator('#host-rows').getByText(name, { exact: true }).waitFor();
+      await page.waitForFunction(value => [...document.querySelectorAll('#host-rows tr')].some(row => row.cells[0]?.firstChild?.textContent === value), name);
       assert.equal(await page.locator('#host-rows b').count(), 0, 'host names remain inert text');
+      assert.equal(await page.evaluate(() => [...document.querySelectorAll('#host-rows tr')].some(row => row.cells[0]?.firstChild?.textContent === 'Hosts')), true, 'a user name identical to a translation key stays verbatim');
       await page.locator('a[data-page=agents]').click();
       await page.locator('#new-agent').click();
       await page.locator('#agent-name').fill(`fixture-agent-${locale}`);
@@ -102,6 +108,7 @@ async function main() {
       const next = locales[(locales.indexOf(locale) + 1) % locales.length];
       await switchInPlace(next);
       assert.equal(await page.locator('#issued-key').inputValue(), key, 'issued key survives a language switch');
+      assert.equal(await page.evaluate(secret => Object.values(localStorage).some(value => value.includes(secret)), key), false, 'language persistence never stores the issued key');
       await switchInPlace(locale);
       await page.locator('#key-dialog .dialog-actions .close-dialog').click();
       await page.locator('#key-dialog').waitFor({ state: 'hidden' });
@@ -162,6 +169,14 @@ async function main() {
       await testPage.waitForFunction(() => !!window.AgentPostI18n);
       assert.equal(await testPage.locator('html').getAttribute('lang'), expected, `browser locale ${language}`);
       await detected.close();
+    }
+    for (const [saved, expected] of [['es', 'es'], ['unsupported-fixture-locale', 'fr']]) {
+      const preferred = await browser.newContext({ locale: 'fr-CA' });
+      await preferred.addInitScript(value => localStorage.setItem('agent-post.locale', value), saved);
+      const preferredPage = await preferred.newPage(); preferredPage.on('pageerror', error => errors.push(error.message));
+      await preferredPage.goto(`${base}/admin/`); await preferredPage.waitForFunction(() => !!window.AgentPostI18n);
+      assert.equal(await preferredPage.locator('html').getAttribute('lang'), expected, 'valid stored preference overrides browser; invalid preference is ignored');
+      await preferred.close();
     }
     const blocked = await browser.newContext({ locale: 'fr-CA' });
     await blocked.addInitScript(() => {
