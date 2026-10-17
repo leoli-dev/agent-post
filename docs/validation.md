@@ -171,4 +171,9 @@ UI-only change.
 
 The application workflow now defines a dedicated Chromium job using pinned
 Playwright 1.62.1 and Node 22, running the Node suite and both browser scripts.
-Hosted results for this follow-up are recorded after the actual run completes.
+[The hosted application run](https://github.com/leoli-dev/agent-post/actions/runs/39073953836)
+completed successfully at `003da8e`: the dedicated Chromium job passed all four
+Node tests, the English smoke and the complete seven-locale browser suite.
+Linux, macOS, and Windows native build/vet/race steps, the generated contract,
+and the real-service smoke also passed. [Documentation CI](https://github.com/leoli-dev/agent-post/actions/runs/39073953840)
+passed for the same revision.
