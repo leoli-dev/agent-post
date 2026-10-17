@@ -103,17 +103,7 @@ function el(tag, text, cls) {
   return node;
 }
 function cell(row, text) { const node = el("td", text); row.append(node); return node; }
-function button(text, action) {
-  const node = el("button", undefined, "quiet"); setMessage(node, text);
-  node.type = "button";
-  node.addEventListener("click", async () => {
-    node.disabled = true;
-    try { await action(); } catch (error) { notice(error, true); }
-    finally { node.disabled = false; }
-  });
-  return node;
-}
-function statusCell(row, enabled) { const node = el("span", undefined, enabled ? "status" : "status off"); setMessage(node, enabled ? "Enabled" : "Disabled"); cell(row).append(node); }
+function statusCell(row, enabled) { const node = el("span", undefined, enabled ? "status" : "status off"); setMessage(node, enabled ? "Enabled" : "Disabled"); const td = cell(row); td.className = "cell-status"; td.append(node); }
 const pageTitles = {overview: "Overview", hosts: "Hosts", agents: "Agents", groups: "Groups", settings: "Limits & retention"};
 function route() {
   const names = Object.keys(pageTitles);
@@ -129,10 +119,12 @@ function route() {
     else a.removeAttribute("aria-current");
   });
 }
-function ask(title, description, action) {
+function ask(title, description, action, {danger = false, subject = ""} = {}) {
   setMessage($("#confirm-title"), title);
+  $("#confirm-subject").textContent = subject; $("#confirm-subject").hidden = !subject;
   setMessage($("#confirm-description"), description);
   setMessage($("#confirm-action"), title);
+  $("#confirm-action").className = danger ? "danger" : "primary";
   confirmAction = action;
   $("#confirm-dialog").showModal();
 }
@@ -147,12 +139,184 @@ function byName(items) {
   const collator = new Intl.Collator(i18n.getLocale(), {numeric: true, sensitivity: "base"});
   return [...(items || [])].sort((a, b) => collator.compare(a.name || "", b.name || "") || String(a.id).localeCompare(String(b.id)));
 }
-function render() {
-  const hosts = byName(state.hosts);
-  const agents = byName(state.agents);
-  const groups = byName(state.groups);
+const SVG = "http://www.w3.org/2000/svg";
+function icon(name) {
+  const svg = document.createElementNS(SVG, "svg"); svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS(SVG, "use"); use.setAttribute("href", `#${name}`);
+  svg.append(use); return svg;
+}
+// Accessible names that interpolate user data; retranslated on language change.
+function setAria(node, key, params = {}) {
+  node.dataset.ariaKey = key; node._ariaParams = params;
+  node.setAttribute("aria-label", t(key, params));
+}
+function copyText(text, done) {
+  return navigator.clipboard.writeText(text).then(() => notice(done), () => notice("Copy failed.", true));
+}
+function shortId(id) {
+  const value = String(id), cut = value.indexOf("_") + 7;
+  return value.length > cut + 8 ? `${value.slice(0, cut)}…${value.slice(-4)}` : value;
+}
+function idChip(id) {
+  const wrap = el("span", undefined, "id");
+  const code = el("code", shortId(id)); code.title = id;
+  const copy = el("button", undefined, "icon-button copy-id"); copy.type = "button";
+  setAria(copy, "Copy ID"); copy.append(icon("i-copy"));
+  copy.addEventListener("click", () => copyText(id, "ID copied."));
+  wrap.append(code, copy); return wrap;
+}
+function relativeTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const seconds = (date.getTime() - Date.now()) / 1000, size = Math.abs(seconds);
+  const format = new Intl.RelativeTimeFormat(i18n.getLocale(), {numeric: "auto"});
+  for (const [unit, length] of [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]]) {
+    if (size >= length) return format.format(Math.round(seconds / length), unit);
+  }
+  return format.format(0, "second");
+}
+function timeNode(value) {
+  const node = el("time", relativeTime(value)); node.dateTime = value;
+  node.dataset.relative = value; node.title = i18n.formatDate(value); return node;
+}
+function label(key) { const node = el("span", undefined, "cell-label"); setMessage(node, key); return node; }
+
+let openMenu;
+const phone = window.matchMedia("(max-width: 767px)");
+function closeMenu(returnFocus = false) {
+  if (!openMenu) return;
+  const {menu, toggle} = openMenu; openMenu = undefined;
+  menu.hidden = true; toggle.setAttribute("aria-expanded", "false");
+  $("#menu-backdrop").hidden = true;
+  if (returnFocus) toggle.focus();
+}
+function showMenu(menu, toggle) {
+  closeMenu();
+  openMenu = {menu, toggle};
+  menu.hidden = false; toggle.setAttribute("aria-expanded", "true");
+  menu.style.top = ""; menu.style.left = "";
+  if (phone.matches) $("#menu-backdrop").hidden = false;
+  else {
+    const anchor = toggle.getBoundingClientRect(), size = menu.getBoundingClientRect();
+    const below = anchor.bottom + 4 + size.height <= window.innerHeight - 8;
+    menu.style.top = `${below ? anchor.bottom + 4 : Math.max(8, anchor.top - 4 - size.height)}px`;
+    menu.style.left = `${Math.max(8, Math.min(anchor.right - size.width, window.innerWidth - size.width - 8))}px`;
+  }
+  [...menu.querySelectorAll("[role=menuitem]")].find(node => node.offsetParent !== null)?.focus();
+}
+function rowMenu(name, items) {
+  const wrap = el("div", undefined, "row-menu");
+  const toggle = el("button", undefined, "icon-button row-menu-toggle"); toggle.type = "button";
+  toggle.setAttribute("aria-haspopup", "menu"); toggle.setAttribute("aria-expanded", "false");
+  setAria(toggle, "Actions for {name}", {name}); toggle.append(icon("i-more"));
+  const menu = el("div", undefined, "menu"); menu.hidden = true; menu.setAttribute("role", "menu");
+  setAria(menu, "Actions for {name}", {name});
+  menu.append(el("p", name, "menu-title"));
+  for (const item of items) {
+    if (item === "-") { const line = el("div", undefined, "menu-sep"); line.setAttribute("role", "separator"); menu.append(line); continue; }
+    const entry = el("button", undefined, ["menuitem", item.danger && "danger", item.phoneOnly && "phone-only"].filter(Boolean).join(" "));
+    entry.type = "button"; entry.tabIndex = -1; entry.setAttribute("role", "menuitem"); setMessage(entry, item.label);
+    entry.addEventListener("click", () => { closeMenu(true); Promise.resolve().then(item.action).catch(error => notice(error, true)); });
+    menu.append(entry);
+  }
+  toggle.addEventListener("click", event => { event.stopPropagation(); if (openMenu?.menu === menu) closeMenu(); else showMenu(menu, toggle); });
+  menu.addEventListener("keydown", event => {
+    const entries = [...menu.querySelectorAll("[role=menuitem]")].filter(node => node.offsetParent !== null);
+    const index = entries.indexOf(document.activeElement);
+    const move = {ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: entries.length - 1}[event.key];
+    if (move !== undefined) { event.preventDefault(); entries[(move + entries.length) % entries.length]?.focus(); }
+    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeMenu(true); }
+    else if (event.key === "Tab") closeMenu();
+  });
+  wrap.append(toggle, menu); return wrap;
+}
+function editButton(action) {
+  const node = el("button", undefined, "quiet compact edit"); node.type = "button";
+  setMessage(node, "Edit"); node.addEventListener("click", action); return node;
+}
+
+// List pages: client-side filter and sort over the full admin state.
+const lists = {
+  hosts: {sort: "name", dir: 1}, agents: {sort: "name", dir: 1}, groups: {sort: "name", dir: 1}
+};
+function compareBy(key, dir, value) {
+  const collator = new Intl.Collator(i18n.getLocale(), {numeric: true, sensitivity: "base"});
+  return (a, b) => {
+    const x = value(a, key), y = value(b, key);
+    const order = typeof x === "number" ? x - y : collator.compare(x, y);
+    return order * dir || collator.compare(a.name || "", b.name || "") || String(a.id).localeCompare(String(b.id));
+  };
+}
+function filtered(name, items, text) {
+  const list = lists[name], section = $(`#page-${name}`);
+  const query = section.querySelector(".filter").value.trim().toLocaleLowerCase();
+  const status = section.querySelector(".status-filter")?.value || "";
+  const shown = items.filter(item => (!status || (status === "enabled") === !!item.enabled) && (!query || text(item).toLocaleLowerCase().includes(query)));
+  section.querySelectorAll("th[data-sort]").forEach(th => {
+    if (th.dataset.sort === list.sort) th.setAttribute("aria-sort", list.dir > 0 ? "ascending" : "descending");
+    else th.removeAttribute("aria-sort");
+  });
+  const count = section.querySelector(".list-count");
+  if (shown.length !== items.length) setMessage(count, "{shown} of {total}", {shown: shown.length, total: items.length}); else clearMessage(count);
+  const empty = section.querySelector(".empty");
+  if (items.length && !shown.length) setMessage(empty, "No results match the filter."); else setMessage(empty, empty.dataset.emptyKey);
+  empty.hidden = shown.length > 0;
+  section.querySelector("table").hidden = shown.length === 0;
+  return shown;
+}
+function renderLists() {
+  const hosts = state.hosts || [], agents = state.agents || [], groups = state.groups || [];
   const hostName = id => hosts.find(h => h.id === id)?.name || id;
   const agentName = id => agents.find(a => a.id === id)?.name || id;
+  const hostValue = (host, key) => key === "status" ? Number(!host.enabled) : key === "os" ? host.os || "" : host.name || "";
+  const shownHosts = filtered("hosts", hosts, host => [host.name, host.id, host.os, ...(host.ips || [])].join(" "))
+    .sort(compareBy(lists.hosts.sort, lists.hosts.dir, hostValue));
+  $("#host-rows").replaceChildren(...shownHosts.map(host => {
+    const row = el("tr");
+    const name = cell(row); name.className = "cell-name"; name.append(el("span", host.name, "primary"), idChip(host.id));
+    const os = cell(row, host.os || undefined); os.className = "cell-meta1"; if (!host.os) setMessage(os, "Unspecified");
+    const ips = cell(row); ips.className = "cell-meta2"; (host.ips || []).forEach(ip => ips.append(el("span", ip, "ip")));
+    statusCell(row, host.enabled);
+    const actions = cell(row); actions.className = "cell-actions";
+    const toggle = () => ask(host.enabled ? "Disable host" : "Enable host", host.enabled ? "Agents on this host will no longer authenticate until the host is enabled." : "Agents on this host can authenticate with valid keys and allowed IP addresses.", async () => { await api(`hosts/${host.id}`, "PATCH", {enabled: !host.enabled}); await reload(); }, {danger: host.enabled, subject: host.name});
+    actions.append(editButton(() => editHost(host)), rowMenu(host.name, [{label: "Edit", action: () => editHost(host), phoneOnly: true}, {label: host.enabled ? "Disable" : "Enable", action: toggle, danger: host.enabled}]));
+    return row;
+  }));
+  const agentValue = (agent, key) => key === "status" ? Number(!agent.enabled) : key === "host" ? hostName(agent.host_id) : key === "last_access" ? (agent.last_access ? Date.parse(agent.last_access) : 0) : agent.name || "";
+  const shownAgents = filtered("agents", agents, agent => [agent.name, agent.id, hostName(agent.host_id)].join(" "))
+    .sort(compareBy(lists.agents.sort, lists.agents.dir, agentValue));
+  $("#agent-rows").replaceChildren(...shownAgents.map(agent => {
+    const row = el("tr");
+    const name = cell(row); name.className = "cell-name"; name.append(el("span", agent.name, "primary"), idChip(agent.id));
+    const host = cell(row); host.className = "cell-meta1"; host.append(label("Host"), el("span", hostName(agent.host_id)));
+    const access = cell(row); access.className = "cell-meta2"; access.append(label("Last access"));
+    if (agent.last_access) access.append(timeNode(agent.last_access)); else { const never = el("span", undefined, "muted"); setMessage(never, "Never accessed"); access.append(never); }
+    statusCell(row, agent.enabled);
+    const actions = cell(row); actions.className = "cell-actions";
+    actions.append(editButton(() => editAgent(agent)), rowMenu(agent.name, [
+      {label: "Edit", action: () => editAgent(agent), phoneOnly: true},
+      {label: "Rotate key", action: () => ask("Rotate key", "The current API key stops working immediately. Update this agent's sessions with the new key.", async () => { const result = await api(`agents/${agent.id}/rotate-key`, "POST", {}); keyResult(result.api_key, agent); }, {danger: true, subject: agent.name})},
+      {label: "Revoke key", danger: true, action: () => ask("Revoke key", "The current key stops working immediately. Issue a new key with Rotate key when the agent needs access again.", async () => { await api(`agents/${agent.id}/revoke-key`, "POST", {}); notice("API key revoked."); }, {danger: true, subject: agent.name})},
+      "-",
+      {label: agent.enabled ? "Disable" : "Enable", danger: agent.enabled, action: () => ask(agent.enabled ? "Disable agent" : "Enable agent", "This changes account access. Retained conversations continue to follow the channel's retention rules.", async () => { await api(`agents/${agent.id}`, "PATCH", {enabled: !agent.enabled}); await reload(); }, {danger: agent.enabled, subject: agent.name})}
+    ]));
+    return row;
+  }));
+  const groupValue = (group, key) => key === "owner" ? agentName(group.owner_id) : group.name || "";
+  const shownGroups = filtered("groups", groups, group => [group.name, group.id, agentName(group.owner_id)].join(" "))
+    .sort(compareBy(lists.groups.sort, lists.groups.dir, groupValue));
+  $("#group-rows").replaceChildren(...shownGroups.map(group => {
+    const row = el("tr");
+    const name = cell(row); name.className = "cell-name"; name.append(el("span", group.name, "primary"));
+    const id = cell(row); id.className = "cell-meta1"; id.append(idChip(group.id));
+    const owner = cell(row); owner.className = "cell-meta2"; owner.append(label("Owner"), el("span", agentName(group.owner_id)));
+    return row;
+  }));
+}
+function render() {
+  const hosts = state.hosts || [];
+  const agents = state.agents || [];
+  const groups = state.groups || [];
   setNumber($("#host-count"), hosts.length);
   setNumber($("#agent-count"), agents.filter(a => a.enabled).length);
   setNumber($("#group-count"), groups.length);
@@ -161,32 +325,7 @@ function render() {
   const cleanupErrors = {"physical file deletion failed": "cleanup.physical", "staging cleanup failed": "cleanup.staging", "unreferenced file cleanup failed": "cleanup.orphan"};
   if (cleanup.last_error) setMessage($("#cleanup-error"), cleanupErrors[cleanup.last_error] || "cleanup.generic");
   else clearMessage($("#cleanup-error"));
-  $("#host-rows").replaceChildren(...hosts.map(host => {
-    const row = el("tr");
-    cell(row, host.name).append(el("small", host.id));
-    if (host.os) cell(row, host.os); else setMessage(cell(row), "Unspecified");
-    const ips = cell(row); (host.ips || []).forEach(ip => ips.append(el("div", ip)));
-    statusCell(row, host.enabled);
-    const actions = cell(row);
-    actions.append(button("Edit", () => editHost(host)), button(host.enabled ? "Disable" : "Enable", () => ask(host.enabled ? "Disable host" : "Enable host", host.enabled ? "Agents on this host will no longer authenticate until the host is enabled." : "Agents on this host can authenticate with valid keys and allowed IP addresses.", async () => { await api(`hosts/${host.id}`, "PATCH", {enabled: !host.enabled}); await reload(); })));
-    return row;
-  }));
-  $("#hosts-empty").hidden = hosts.length > 0;
-  $("#agent-rows").replaceChildren(...agents.map(agent => {
-    const row = el("tr");
-    cell(row, agent.name).append(el("small", agent.id));
-    cell(row, hostName(agent.host_id));
-    if (agent.last_access) { const node = cell(row, i18n.formatDate(agent.last_access)); node.dataset.i18nDate = agent.last_access; } else setMessage(cell(row), "Never accessed");
-    statusCell(row, agent.enabled);
-    const actions = cell(row);
-    actions.append(button("Edit", () => editAgent(agent)), button("Rotate key", () => ask("Rotate key", "The current API key stops working immediately. Update this agent's sessions with the new key.", async () => { const result = await api(`agents/${agent.id}/rotate-key`, "POST", {}); keyResult(result.api_key, agent); })), button("Revoke key", () => ask("Revoke key", "The current key stops working immediately. Issue a new key with Rotate key when the agent needs access again.", async () => { await api(`agents/${agent.id}/revoke-key`, "POST", {}); notice("API key revoked."); })), button(agent.enabled ? "Disable" : "Enable", () => ask(agent.enabled ? "Disable agent" : "Enable agent", "This changes account access. Retained conversations continue to follow the channel's retention rules.", async () => { await api(`agents/${agent.id}`, "PATCH", {enabled: !agent.enabled}); await reload(); })));
-    return row;
-  }));
-  $("#agents-empty").hidden = agents.length > 0;
-  $("#group-rows").replaceChildren(...groups.map(group => {
-    const row = el("tr"); cell(row, group.name); cell(row, group.id); cell(row, agentName(group.owner_id)); return row;
-  }));
-  $("#groups-empty").hidden = groups.length > 0;
+  renderLists();
   $("#settings-fields").replaceChildren(...Object.entries(settingLabels).filter(([name]) => name in state.settings).map(([name, [label, help]]) => {
     const wrap = el("div"); const lbl = el("label"); setMessage(lbl, label); lbl.htmlFor = `setting-${name}`;
     const input = el("input"); input.type = "number"; input.id = `setting-${name}`; input.name = name; input.value = state.settings[name]; input.min = name === "file_count" ? "0" : "1"; input.step = "1"; input.required = true;
@@ -278,8 +417,21 @@ $("#new-host").addEventListener("click", () => editHost());
 $("#new-agent").addEventListener("click", () => editAgent());
 $("#refresh").addEventListener("click", () => reload().then(() => notice("Data refreshed.")).catch(error => notice(error, true)));
 $("#cleanup-retry").addEventListener("click", () => api("cleanup", "POST", {}).then(reload).then(() => notice("Cleanup retried.")).catch(error => notice(error, true)));
+document.querySelectorAll(".filter, .status-filter").forEach(control => control.addEventListener("input", renderLists));
+document.querySelectorAll(".empty").forEach(node => { node.dataset.emptyKey = node.dataset.i18n; });
+document.querySelectorAll("th[data-sort] button").forEach(node => node.addEventListener("click", () => {
+  const list = lists[node.closest(".page").id.slice(5)], key = node.closest("th").dataset.sort;
+  list.dir = list.sort === key ? -list.dir : key === "last_access" ? -1 : 1; list.sort = key;
+  renderLists();
+}));
+$("#menu-backdrop").addEventListener("click", () => closeMenu(true));
+window.addEventListener("resize", () => closeMenu());
+window.addEventListener("scroll", () => { if (!phone.matches) closeMenu(); }, {passive: true});
 $("#menu-toggle").addEventListener("click", event => { event.stopPropagation(); setMenu(!$("#console").classList.contains("menu-open")); });
-document.addEventListener("click", event => { if (!event.target.closest("#account-panel, #menu-toggle")) setMenu(false); });
+document.addEventListener("click", event => {
+  if (!event.target.closest("#account-panel, #menu-toggle")) setMenu(false);
+  if (openMenu && !event.target.closest(".menu")) closeMenu();
+});
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && $("#console").classList.contains("menu-open")) { setMenu(false); $("#menu-toggle").focus(); }
 });
@@ -302,7 +454,8 @@ document.addEventListener("invalid", event => localizeValidity(event.target), tr
 document.addEventListener("input", event => { if (event.target.setCustomValidity) event.target.setCustomValidity(""); }, true);
 window.addEventListener("agentpost:languagechange", () => {
   // Update text in place: no rerender, form reset, modal close or API request.
-  document.querySelectorAll("[data-i18n-date]").forEach(node => { node.textContent = i18n.formatDate(node.dataset.i18nDate); });
+  document.querySelectorAll("[data-relative]").forEach(node => { node.textContent = relativeTime(node.dataset.relative); node.title = i18n.formatDate(node.dataset.relative); });
+  document.querySelectorAll("[data-aria-key]").forEach(node => node.setAttribute("aria-label", t(node.dataset.ariaKey, node._ariaParams || {})));
   showRefreshed();
   document.querySelectorAll("#host-count, #agent-count, #group-count").forEach(node => { if (node._i18nNumber !== undefined) node.textContent = i18n.formatNumber(node._i18nNumber); });
   document.querySelectorAll("[data-i18n]").forEach(node => { if (node._supportCode) node.textContent += ` ${t("Support code: {code}", {code: node._supportCode})}`; });

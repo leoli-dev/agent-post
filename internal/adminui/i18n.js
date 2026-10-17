@@ -171,7 +171,18 @@ const catalogs = {
     "Hide password": "Hide password",
     "Limits": "Limits",
     "Updated {time}": "Updated {time}",
-    "More": "More"
+    "More": "More",
+    "Filter hosts": "Filter hosts",
+    "Filter agents": "Filter agents",
+    "Filter groups": "Filter groups",
+    "All statuses": "All statuses",
+    "Status filter": "Status filter",
+    "{shown} of {total}": "{shown} of {total}",
+    "No results match the filter.": "No results match the filter.",
+    "Actions for {name}": "Actions for {name}",
+    "Copy ID": "Copy ID",
+    "ID copied.": "ID copied.",
+    "Copy failed.": "Copy failed."
   },
   "fr": {
     "Administration": "Administration",
@@ -342,7 +353,18 @@ const catalogs = {
     "Hide password": "Masquer le mot de passe",
     "Limits": "Limites",
     "Updated {time}": "Mis à jour à {time}",
-    "More": "Plus"
+    "More": "Plus",
+    "Filter hosts": "Filtrer les hôtes",
+    "Filter agents": "Filtrer les agents",
+    "Filter groups": "Filtrer les groupes",
+    "All statuses": "Tous les états",
+    "Status filter": "Filtre d’état",
+    "{shown} of {total}": "{shown} sur {total}",
+    "No results match the filter.": "Aucun résultat ne correspond au filtre.",
+    "Actions for {name}": "Actions pour {name}",
+    "Copy ID": "Copier l’ID",
+    "ID copied.": "ID copié.",
+    "Copy failed.": "La copie a échoué."
   },
   "zh-Hans": {
     "Administration": "管理",
@@ -513,7 +535,18 @@ const catalogs = {
     "Hide password": "隐藏密码",
     "Limits": "限制",
     "Updated {time}": "更新于 {time}",
-    "More": "更多"
+    "More": "更多",
+    "Filter hosts": "筛选主机",
+    "Filter agents": "筛选智能体",
+    "Filter groups": "筛选群组",
+    "All statuses": "全部状态",
+    "Status filter": "状态筛选",
+    "{shown} of {total}": "{shown} / {total}",
+    "No results match the filter.": "没有符合筛选条件的结果。",
+    "Actions for {name}": "{name} 的操作",
+    "Copy ID": "复制 ID",
+    "ID copied.": "ID 已复制。",
+    "Copy failed.": "复制失败。"
   },
   "zh-Hant": {
     "Administration": "管理",
@@ -684,7 +717,18 @@ const catalogs = {
     "Hide password": "隱藏密碼",
     "Limits": "限制",
     "Updated {time}": "更新於 {time}",
-    "More": "更多"
+    "More": "更多",
+    "Filter hosts": "篩選主機",
+    "Filter agents": "篩選智慧體",
+    "Filter groups": "篩選群組",
+    "All statuses": "全部狀態",
+    "Status filter": "狀態篩選",
+    "{shown} of {total}": "{shown} / {total}",
+    "No results match the filter.": "沒有符合篩選條件的結果。",
+    "Actions for {name}": "{name} 的操作",
+    "Copy ID": "複製 ID",
+    "ID copied.": "ID 已複製。",
+    "Copy failed.": "複製失敗。"
   },
   "it": {
     "Administration": "Amministrazione",
@@ -855,7 +899,18 @@ const catalogs = {
     "Hide password": "Nascondi password",
     "Limits": "Limiti",
     "Updated {time}": "Aggiornato alle {time}",
-    "More": "Altro"
+    "More": "Altro",
+    "Filter hosts": "Filtra host",
+    "Filter agents": "Filtra agenti",
+    "Filter groups": "Filtra gruppi",
+    "All statuses": "Tutti gli stati",
+    "Status filter": "Filtro stato",
+    "{shown} of {total}": "{shown} di {total}",
+    "No results match the filter.": "Nessun risultato corrisponde al filtro.",
+    "Actions for {name}": "Azioni per {name}",
+    "Copy ID": "Copia ID",
+    "ID copied.": "ID copiato.",
+    "Copy failed.": "Copia non riuscita."
   },
   "es": {
     "Administration": "Administración",
@@ -1026,7 +1081,18 @@ const catalogs = {
     "Hide password": "Ocultar contraseña",
     "Limits": "Límites",
     "Updated {time}": "Actualizado a las {time}",
-    "More": "Más"
+    "More": "Más",
+    "Filter hosts": "Filtrar equipos",
+    "Filter agents": "Filtrar agentes",
+    "Filter groups": "Filtrar grupos",
+    "All statuses": "Todos los estados",
+    "Status filter": "Filtro de estado",
+    "{shown} of {total}": "{shown} de {total}",
+    "No results match the filter.": "Ningún resultado coincide con el filtro.",
+    "Actions for {name}": "Acciones para {name}",
+    "Copy ID": "Copiar ID",
+    "ID copied.": "ID copiado.",
+    "Copy failed.": "No se pudo copiar."
   },
   "ru": {
     "Administration": "Администрирование",
@@ -1197,7 +1263,18 @@ const catalogs = {
     "Hide password": "Скрыть пароль",
     "Limits": "Лимиты",
     "Updated {time}": "Обновлено в {time}",
-    "More": "Ещё"
+    "More": "Ещё",
+    "Filter hosts": "Фильтр хостов",
+    "Filter agents": "Фильтр агентов",
+    "Filter groups": "Фильтр групп",
+    "All statuses": "Все состояния",
+    "Status filter": "Фильтр состояния",
+    "{shown} of {total}": "{shown} из {total}",
+    "No results match the filter.": "Нет результатов, соответствующих фильтру.",
+    "Actions for {name}": "Действия для {name}",
+    "Copy ID": "Скопировать ID",
+    "ID copied.": "ID скопирован.",
+    "Copy failed.": "Не удалось скопировать."
   }
 };
 const supportedLocales = Object.freeze([
