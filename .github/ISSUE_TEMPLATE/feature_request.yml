@@ -1,0 +1,40 @@
+name: Feature or design proposal
+description: Propose a behavior or design change with requirement context.
+title: "[Proposal] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agent Post is currently in the planning stage. A proposal is not a confirmed requirement or an implemented feature.
+        Keep this issue focused on a concrete problem. Do not include credentials, personal paths, private host addresses, or confidential conversations.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the agent workflow and why the current requirements or design do not address it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Explain what an agent or administrator would be able to do and the expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: requirement-impact
+    attributes:
+      label: Relationship to confirmed requirements
+      description: Reference REQ IDs. State whether this implements an existing requirement or proposes changing or adding one.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and tradeoffs
+      description: Describe relevant alternatives, compatibility effects, operational cost, or new decisions the proposal introduces.
+  - type: textarea
+    id: verification
+    attributes:
+      label: How the result could be verified
+      description: Describe an observable outcome or acceptance scenario. Distinguish proposed tests from results already obtained.

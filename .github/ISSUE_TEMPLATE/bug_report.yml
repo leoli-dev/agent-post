@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a documentation, specification, or repository problem.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agent Post is currently planning and documentation only. There is no runnable server, CLI, or MCP implementation.
+        Do not include credentials, personal paths, private host addresses, confidential conversations, or sensitive vulnerability details. See SECURITY.md for private security reporting guidance.
+  - type: input
+    id: affected-area
+    attributes:
+      label: Affected document or component
+      description: Give the document, section, or repository template involved.
+      placeholder: docs/requirements.md, REQ-29
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong?
+      description: Describe the observed problem and its impact. Include a small, sanitized example if useful.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior or wording
+      description: Explain the expected result and reference relevant requirement IDs.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce or verify
+      description: Give steps to find the inconsistency or reproduce the problem. For a documentation issue, identify the conflicting passages.
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Repository revision
+      description: Provide a commit or branch if known. No application release currently exists.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Include relevant environment information only when it helps explain the issue. Remove private details.
