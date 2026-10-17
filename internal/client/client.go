@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -45,7 +46,9 @@ func LoadConfig(path string) (Config, error) {
 		if !st.Mode().IsRegular() {
 			return c, errors.New("config must be a regular file")
 		}
-		if st.Mode().Perm()&0077 != 0 {
+		// Windows exposes synthetic Unix mode bits; credential ACLs must be
+		// restricted by the operator. Do not misinterpret those bits as an ACL.
+		if runtime.GOOS != "windows" && st.Mode().Perm()&0077 != 0 {
 			return c, errors.New("config permissions must restrict access to its owner (chmod 600)")
 		}
 		f, e := os.Open(path)

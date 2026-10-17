@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -104,8 +105,10 @@ func TestConfigValidation(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.json")
 	os.WriteFile(p, []byte(`{"url":"http://example.test","api_key":"synthetic"}`), 0644)
-	if _, e := LoadConfig(p); e == nil {
-		t.Fatal("accepted permissive credentials")
+	if runtime.GOOS != "windows" {
+		if _, e := LoadConfig(p); e == nil {
+			t.Fatal("accepted permissive credentials")
+		}
 	}
 	os.Chmod(p, 0600)
 	t.Setenv("AGENT_POST_URL", "http://override.test")
