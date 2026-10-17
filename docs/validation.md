@@ -205,3 +205,9 @@ measurement was performed.
   status token on its backgrounds is at least 4.74:1 (light) and 5.71:1 (dark).
 - New and changed strings were translated with agent assistance; there was no
   native-speaker review for this change.
+
+[The hosted application run](https://github.com/leoli-dev/agent-post/actions/runs/39078068746)
+completed successfully at `011642d`: the admin UI job (Node tests, English
+smoke, and the seven-locale Chromium suite), Linux, macOS, and Windows native
+build/vet/race, and the contract smoke all passed. [Documentation CI](https://github.com/leoli-dev/agent-post/actions/runs/39078068735)
+passed for the same revision.
