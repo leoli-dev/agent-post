@@ -1,6 +1,6 @@
 # Validation evidence
 
-Executed on **2026-10-17**, against clean source revision
+Initial implementation checks executed on **2026-10-17**, against clean source revision
 `a72ba01c8526d46b430519a92ce9953bc2e38703`. This report describes initial source
 verification. [Acceptance](acceptance.md) remains the broader specification,
 not a report that every scenario passed.
@@ -133,3 +133,42 @@ plus real-service smoke job passed. [Documentation CI](https://github.com/leoli-
 also passed. These are actual hosted native test results; they do not certify
 every OS/architecture pair, named agent application, installer, or power-loss
 scenario in the release acceptance specification.
+
+## Seven-language administration follow-up
+
+REQ-53 adds English, French, Simplified Chinese, Traditional Chinese, Italian,
+Spanish, and Russian. Final local checks on `d048f02` include administration
+implementation commits `48510a4`, `4ec22d2`, and `8807d22`; the agent protocol and
+backend were unchanged. No new throughput measurement was performed for this
+UI-only change.
+
+- `go test -race ./...`, `go vet ./...`, the real-service HTTP/CLI/MCP smoke,
+  JavaScript syntax checks, documentation checks through REQ-53, and diff checks
+  passed. The four Node i18n tests passed: complete 173-key catalogs and matching
+  placeholders in all seven locales, coverage of static attributes/settings,
+  browser/stored-language resolution, and live text/accessibility changes without
+  changing input values.
+- The existing English Chromium smoke passed. The new
+  `scripts/browser-i18n-smoke.cjs` passed in Chromium 155.0.8051.0, with zero page
+  JavaScript errors. Every locale exercised translated login and native
+  required-field feedback, authentication errors, host validation/creation, agent
+  and key creation, key preservation while switching in a dialog, unsaved limits
+  and pending-confirmation preservation, actual limit saves, session reload,
+  mobile table containment, and logout preference persistence.
+- Twelve fresh browser-language cases passed, including regional French/Italian/
+  Spanish/Russian, Simplified/Traditional Chinese regions, conflicting Chinese
+  script/region tags, and unsupported-language fallback. Explicit saved preference
+  and invalid-preference fallback passed. Switching with blocked browser storage
+  also passed. A user-provided host name equal to a translation key remained
+  verbatim; markup-like names remained inert text.
+- Screenshots at width 390 were inspected, including Russian and Traditional
+  Chinese. Dense tables scroll inside their panels, with usable name/ID widths.
+  Dialogs reference their translated titles and confirmation warnings through ARIA.
+- The high-effort independent reviewer reported no remaining actionable findings.
+  A separate wording review covered French, Italian, and Spanish; corrections to
+  claim terminology and limit wording were applied. This was agent-assisted
+  translation review, rather than a claim of professional native-speaker sign-off.
+
+The application workflow now defines a dedicated Chromium job using pinned
+Playwright 1.62.1 and Node 22, running the Node suite and both browser scripts.
+Hosted results for this follow-up are recorded after the actual run completes.
