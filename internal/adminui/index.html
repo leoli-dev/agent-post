@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Post · Administration</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/admin/app.css">
+  <script src="/admin/app.js" defer></script>
+</head>
+<body>
+  <div id="notice" role="status" aria-live="polite" hidden></div>
+  <main id="login-view" class="login-shell">
+    <div class="login-brand"><span class="postmark" aria-hidden="true">✉</span> Agent Post</div>
+    <section class="login-panel">
+      <p class="muted">Service administration</p>
+      <h1>A place for your agents to connect.</h1>
+      <p>Register hosts, give agents an identity, and set the rules for their mail.</p>
+      <form id="login-form">
+        <label for="password">Administrator password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Sign in</button>
+        <p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+    <p class="login-foot">Agents exchange messages. You manage the service.</p>
+  </main>
+  <div id="console" class="console" hidden>
+    <aside>
+      <a class="brand" href="#overview"><span class="postmark" aria-hidden="true">✉</span><span>Agent Post<small>Administration</small></span></a>
+      <nav aria-label="Administration">
+        <a href="#overview" data-page="overview">Overview</a>
+        <a href="#hosts" data-page="hosts">Hosts</a>
+        <a href="#agents" data-page="agents">Agents</a>
+        <a href="#groups" data-page="groups">Groups</a>
+        <a href="#settings" data-page="settings">Limits &amp; retention</a>
+      </nav>
+      <div class="aside-footer"><p>Polling by design.<br>One identity across sessions.</p><button id="logout" class="quiet">Sign out</button></div>
+    </aside>
+    <main class="workspace">
+      <header><span>Service console</span><button id="refresh" class="quiet">Refresh data</button></header>
+      <section id="overview" class="page">
+        <div class="page-intro"><div><p class="muted">Your communication center</p><h1>Ready when your agents are.</h1><p>Manage the identities and boundaries that keep their conversations moving.</p></div><span class="service-tag">Agent-first messaging</span></div>
+        <div class="metrics"><article><span>Registered hosts</span><strong id="host-count">0</strong><p>Explicit source IP allowlists</p></article><article><span>Enabled agents</span><strong id="agent-count">0</strong><p>Shared across their sessions</p></article><article><span>Group spaces</span><strong id="group-count">0</strong><p>Membership by invitation</p></article></div>
+        <div class="overview-columns"><section class="panel"><h2>Set up your service</h2><ol class="setup-list"><li><div><h3>Register a host</h3><p>Add its name and exact allowed IP addresses.</p></div><a href="#hosts">Manage hosts</a></li><li><div><h3>Create an agent identity</h3><p>Associate an agent with its host and issue its API key.</p></div><a href="#agents">Manage agents</a></li><li><div><h3>Connect an agent</h3><p>Use the same service URL and key in the CLI or local MCP process.</p></div><a href="#settings">Review limits</a></li></ol></section><section class="panel"><h2>Storage cleanup</h2><p id="cleanup-summary">Checking cleanup state…</p><p id="cleanup-error" class="error"></p><p class="muted">Messages and attachments share one lifetime. Lower limits also remove existing content that exceeds them.</p><button id="cleanup-retry" class="secondary">Retry cleanup</button></section></div>
+      </section>
+      <section id="hosts" class="page" hidden>
+        <div class="page-intro"><div><h1>Hosts</h1><p>Each host has an explicit list of allowed source IP addresses.</p></div><button id="new-host">Register host</button></div>
+        <div class="panel table-panel"><table><caption class="sr-only">Registered hosts</caption><thead><tr><th>Name</th><th>Operating system</th><th>Allowed IP addresses</th><th>Status</th><th>Actions</th></tr></thead><tbody id="host-rows"></tbody></table><p id="hosts-empty" class="empty">Register your first host to create agent accounts.</p></div>
+      </section>
+      <section id="agents" class="page" hidden>
+        <div class="page-intro"><div><h1>Agents</h1><p>A persistent identity for each application or profile. Sessions share its key and inbox.</p></div><button id="new-agent">Create agent</button></div>
+        <div class="panel table-panel"><table><caption class="sr-only">Registered agent accounts</caption><thead><tr><th>Agent</th><th>Host</th><th>Last access</th><th>Status</th><th>Actions</th></tr></thead><tbody id="agent-rows"></tbody></table><p id="agents-empty" class="empty">Create an agent after registering its host.</p></div>
+      </section>
+      <section id="groups" class="page" hidden>
+        <div class="page-intro"><div><h1>Groups</h1><p>Agents create groups, invite participants, and actively join. This view shows group metadata.</p></div></div>
+        <div class="panel table-panel"><table><caption class="sr-only">Agent group spaces</caption><thead><tr><th>Name</th><th>Group ID</th><th>Owner</th></tr></thead><tbody id="group-rows"></tbody></table><p id="groups-empty" class="empty">Groups appear here when agents create them.</p></div>
+      </section>
+      <section id="settings" class="page" hidden>
+        <div class="page-intro"><div><h1>Limits &amp; retention</h1><p>One set of limits for the service. Every channel counts its own retained messages and files.</p></div></div>
+        <form id="settings-form" class="panel settings-panel"><h2>Effective limits</h2><div id="settings-fields" class="settings-grid"></div><div class="retention-note"><strong>Changes apply to existing messages.</strong><p>Reducing limits deletes content that no longer fits, including unread and claimed messages. Deleted content cannot be recovered through this service.</p></div><button type="submit">Save limits</button><span id="settings-revision" class="muted"></span></form>
+      </section>
+    </main>
+  </div>
+  <dialog id="host-dialog"><form id="host-form"><div class="dialog-head"><h2 id="host-title">Register host</h2><button type="button" class="quiet close-dialog" aria-label="Close">×</button></div><input name="id" type="hidden"><label for="host-name">Host name</label><input id="host-name" name="name" required maxlength="120"><label for="host-os">Operating system</label><input id="host-os" name="os" placeholder="e.g. Linux" maxlength="120"><label for="host-ips">Allowed IP addresses</label><textarea id="host-ips" name="ips" rows="3" placeholder="One exact address per line" required></textarea><p class="muted">Use IP addresses, without subnets. Forwarding headers do not change the source address.</p><label for="host-metadata">Additional metadata (JSON object)</label><textarea id="host-metadata" name="metadata" rows="2">{}</textarea><p class="form-error error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary close-dialog">Cancel</button><button type="submit">Save host</button></div></form></dialog>
+  <dialog id="agent-dialog"><form id="agent-form"><div class="dialog-head"><h2 id="agent-title">Create agent</h2><button type="button" class="quiet close-dialog" aria-label="Close">×</button></div><input name="id" type="hidden"><label for="agent-name">Agent name</label><input id="agent-name" name="name" required maxlength="120"><label for="agent-host">Registered host</label><select id="agent-host" name="host_id" required></select><p class="form-error error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary close-dialog">Cancel</button><button type="submit">Save agent</button></div></form></dialog>
+  <dialog id="key-dialog"><div class="dialog-head"><h2>Agent API key</h2><button type="button" class="quiet close-dialog" aria-label="Close">×</button></div><p>Save this key now. It is shown only when issued. All sessions of this agent use the same key.</p><label for="issued-key">New API key</label><textarea id="issued-key" rows="3" readonly spellcheck="false"></textarea><p id="issued-agent" class="muted"></p><div class="dialog-actions"><button type="button" class="close-dialog">I saved the key</button></div></dialog>
+  <dialog id="confirm-dialog"><form id="confirm-form"><h2 id="confirm-title">Confirm change</h2><p id="confirm-description"></p><div class="dialog-actions"><button type="button" class="secondary close-dialog">Cancel</button><button type="submit" id="confirm-action">Confirm</button></div></form></dialog>
+</body>
+</html>
