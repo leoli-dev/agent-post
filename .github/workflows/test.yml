@@ -45,3 +45,26 @@ jobs:
           diff -u docs/openapi.json /tmp/openapi.json
       - name: Exercise real binary and persistent server
         run: python3 scripts/smoke.py
+  admin-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Build service and install pinned Chromium test tools
+        run: |
+          go build -trimpath -o bin/agent-post ./cmd/agent-post
+          npm install --prefix "$RUNNER_TEMP/agent-post-ui-tools" --no-audit --no-fund playwright@1.62.1
+          "$RUNNER_TEMP/agent-post-ui-tools/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Exercise English and all seven localized admin interfaces
+        env:
+          NODE_PATH: ${{ runner.temp }}/agent-post-ui-tools/node_modules
+        run: |
+          node scripts/browser-smoke.cjs
+          node scripts/browser-i18n-smoke.cjs

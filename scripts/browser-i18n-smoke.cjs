@@ -125,6 +125,10 @@ async function main() {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${locale}: settings have no horizontal page overflow`);
       await page.locator('a[data-page=agents]').click();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${locale}: dense tables stay inside their panels`);
+      if (process.env.AGENT_POST_SCREENSHOT_DIR) {
+        await fs.mkdir(process.env.AGENT_POST_SCREENSHOT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.AGENT_POST_SCREENSHOT_DIR, `admin-i18n-${locale}.png`), fullPage: false });
+      }
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.locator('#logout').click();
       await page.locator('#login-view').waitFor({ state: 'visible' });
