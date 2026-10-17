@@ -2,7 +2,9 @@ name: Application
 
 on:
   push:
+    paths-ignore: ['**.md', 'THIRD_PARTY_LICENSES.txt', 'LICENSE']
   pull_request:
+    paths-ignore: ['**.md', 'THIRD_PARTY_LICENSES.txt', 'LICENSE']
 
 permissions:
   contents: read
