@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -20,7 +21,11 @@ import (
 // Build and exercise the shipped entry point, including its stdio discipline.
 func TestExecutableAdapters(t *testing.T) {
 	dir := t.TempDir()
-	binary := filepath.Join(dir, "agent-post")
+	name := "agent-post"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	binary := filepath.Join(dir, name)
 	build := exec.Command("go", "build", "-o", binary, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v %s", err, out)
