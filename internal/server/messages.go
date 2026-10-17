@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode/utf8"
 )
@@ -23,6 +24,8 @@ type sendInput struct {
 	Body string   `json:"body"`
 }
 type upload struct {
+	Prepared    []*File
+	AllPrepared []*File
 	File
 	Path string
 }
@@ -30,10 +33,13 @@ type upload struct {
 func (s *Server) parseSend(r *http.Request) (in sendInput, u *upload, err error) {
 	if p, ok := r.Context().Value(preparedKey{}).(preparedSend); ok {
 		if utf8.RuneCountInString(p.in.Body) > s.st.Settings.BodyCodepoints {
-			return p.in, p.u, bad("text_too_long")
+			return p.in, p.u, &apiError{Code: "text_too_long", Limit: s.st.Settings.BodyCodepoints, SettingsRevision: s.st.Settings.Revision}
 		}
-		if p.u != nil && (p.u.Size > s.st.Settings.FileBytes || s.st.Settings.FileCount == 0) {
-			return p.in, p.u, bad("file_too_large")
+		if p.u != nil && s.st.Settings.FileCount == 0 {
+			return p.in, p.u, &apiError{Code: "files_disabled", Limit: 0, SettingsRevision: s.st.Settings.Revision}
+		}
+		if p.u != nil && p.u.Size > s.st.Settings.FileBytes {
+			return p.in, p.u, &apiError{Code: "file_too_large", Limit: s.st.Settings.FileBytes, SettingsRevision: s.st.Settings.Revision}
 		}
 		if s.cleanupError != "" {
 			return p.in, p.u, bad("cleanup_unavailable")
@@ -66,7 +72,7 @@ func (s *Server) parseSend(r *http.Request) (in sendInput, u *upload, err error)
 					return in, u, bad("invalid_multipart")
 				}
 				hasMeta = true
-				b, e := ioReadBounded(p, 1<<20)
+				b, e := ioReadBounded(p, maxJSONBytes)
 				if e != nil {
 					return in, u, e
 				}
@@ -175,32 +181,15 @@ func (s *Server) send(a *storedAgent, ch *Channel, body string, u *upload) (map[
 	}
 	var file *File
 	if u != nil {
-		id := secret("file_")
-		f, e := os.Open(u.Path)
-		if e != nil {
-			return nil, e
+		if len(u.Prepared) == 0 {
+			return nil, bad("storage_unavailable")
 		}
-		out, e := os.OpenFile(filepath.Join(s.opts.DataDir, "files", id), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if e != nil {
-			f.Close()
-			return nil, e
+		file = u.Prepared[0]
+		u.Prepared = u.Prepared[1:]
+		if file == nil {
+			return nil, bad("storage_unavailable")
 		}
-		_, e = io.Copy(out, f)
-		f.Close()
-		if e == nil {
-			e = out.Sync()
-		}
-		ce := out.Close()
-		if e == nil {
-			e = ce
-		}
-		if e != nil {
-			os.Remove(filepath.Join(s.opts.DataDir, "files", id))
-			return nil, e
-		}
-		v := u.File
-		v.ID = id
-		file = &v
+
 	}
 	s.st.Sequence++
 	m := &Message{ID: secret("msg_"), Sequence: s.st.Sequence, ChannelID: ch.ID, SenderID: a.ID, Body: body, CreatedAt: s.now().UTC(), Attachment: file}
@@ -227,25 +216,23 @@ func (s *Server) send(a *storedAgent, ch *Channel, body string, u *upload) (map[
 func (s *Server) retain() {
 	remove := map[string]bool{}
 	counts, files := map[string]int{}, map[string]int{}
+	// The newest-N window is fixed before coupled file/oversize deletion. A later
+	// purge never brings an older message back into that retention window.
 	for i := len(s.st.Messages) - 1; i >= 0; i-- {
 		m := s.st.Messages[i]
-		invalid := utf8.RuneCountInString(m.Body) > s.st.Settings.BodyCodepoints
-		if m.Attachment != nil && m.Attachment.Size > s.st.Settings.FileBytes {
-			invalid = true
-		}
-		if invalid {
+		counts[m.ChannelID]++
+		if counts[m.ChannelID] > s.st.Settings.MessageCount {
 			remove[m.ID] = true
 			continue
 		}
-		counts[m.ChannelID]++
+		if utf8.RuneCountInString(m.Body) > s.st.Settings.BodyCodepoints || m.Attachment != nil && m.Attachment.Size > s.st.Settings.FileBytes {
+			remove[m.ID] = true
+			continue
+		}
 		if m.Attachment != nil {
 			files[m.ChannelID]++
-		}
-		if counts[m.ChannelID] > s.st.Settings.MessageCount || m.Attachment != nil && files[m.ChannelID] > s.st.Settings.FileCount {
-			remove[m.ID] = true
-			counts[m.ChannelID]--
-			if m.Attachment != nil {
-				files[m.ChannelID]--
+			if files[m.ChannelID] > s.st.Settings.FileCount {
+				remove[m.ID] = true
 			}
 		}
 	}
@@ -256,7 +243,7 @@ func (s *Server) retain() {
 			continue
 		}
 		if m.Attachment != nil {
-			s.st.Deletions = append(s.st.Deletions, m.Attachment.ID)
+			s.queueDelete(m.Attachment.ID)
 		}
 		for k, d := range s.st.Deliveries {
 			if d.MessageID == m.ID {
@@ -319,4 +306,83 @@ func messageMap(m *Message) map[string]any {
 	v := map[string]any{}
 	json.Unmarshal(b, &v)
 	return v
+}
+
+// Materialization precedes the state critical section. Final authorization and
+// deduplication are checked again before committing any prepared copy.
+func (s *Server) prepareFiles(u *upload, n int) {
+	for i := 0; i < n; i++ {
+		var result *File
+		id := secret("file_")
+		func() {
+			in, e := os.Open(u.Path)
+			if e != nil {
+				return
+			}
+			defer in.Close()
+			out, e := os.OpenFile(filepath.Join(s.opts.DataDir, "files", id), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if e != nil {
+				return
+			}
+			v := u.File
+			v.ID = id
+			u.AllPrepared = append(u.AllPrepared, &v)
+			_, e = io.Copy(out, in)
+			if e == nil {
+				e = out.Sync()
+			}
+			ce := out.Close()
+			if e == nil {
+				e = ce
+			}
+			if e != nil {
+				os.Remove(filepath.Join(s.opts.DataDir, "files", id))
+				return
+			}
+			result = &v
+		}()
+		u.Prepared = append(u.Prepared, result)
+	}
+	if runtime.GOOS != "windows" {
+		dir, e := os.Open(filepath.Join(s.opts.DataDir, "files"))
+		if e == nil {
+			e = dir.Sync()
+			dir.Close()
+		}
+		if e != nil {
+			for _, f := range u.AllPrepared {
+				os.Remove(filepath.Join(s.opts.DataDir, "files", f.ID))
+			}
+			for i := range u.Prepared {
+				u.Prepared[i] = nil
+			}
+		}
+	}
+}
+func (s *Server) releasePrepared(u *upload) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	owned := map[string]bool{}
+	for _, m := range s.st.Messages {
+		if m.Attachment != nil {
+			owned[m.Attachment.ID] = true
+		}
+	}
+	for _, f := range u.AllPrepared {
+		if !owned[f.ID] {
+			if e := os.Remove(filepath.Join(s.opts.DataDir, "files", f.ID)); e != nil && !os.IsNotExist(e) {
+				s.queueDelete(f.ID)
+				s.cleanupError = "physical file deletion failed"
+			}
+		}
+	}
+	s.save()
+}
+
+func (s *Server) releaseStaging(path string) {
+	if e := os.Remove(path); e != nil && !os.IsNotExist(e) {
+		s.mu.Lock()
+		s.cleanupError = "staging cleanup failed"
+		s.mu.Unlock()
+	}
 }

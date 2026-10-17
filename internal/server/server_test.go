@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -361,4 +362,229 @@ func TestCleanupFailureIsVisibleAndRecoverable(t *testing.T) {
 }
 func ExampleSettings() {
 	fmt.Println(defaults().ClaimSeconds) // Output: 60
+}
+
+func TestStrictUnicodeEscapes(t *testing.T) {
+	cases := []struct {
+		input string
+		valid bool
+	}{{`{"body":"\ud800"}`, false}, {`{"body":"\udc00"}`, false}, {`{"body":"\ud800\u0041"}`, false}, {`{"body":"\ud83d\ude00"}`, true}, {`{"body":"\\ud800"}`, true}}
+	for _, c := range cases {
+		var out map[string]string
+		e := strictJSON([]byte(c.input), &out)
+		if (e == nil) != c.valid {
+			t.Fatalf("%s: %v", c.input, e)
+		}
+	}
+}
+func TestStrictNewestWindowBeforeFileEviction(t *testing.T) {
+	f := setup(t)
+	f.send("old text", f.ids["bob"])
+	f.upload([]byte("middle"), []string{f.ids["bob"]})
+	f.upload([]byte("newest"), []string{f.ids["bob"]})
+	settings := f.s.st.Settings
+	settings.MessageCount = 2
+	settings.FileCount = 1
+	f.must("PUT", "/admin/api/settings", testPassword, settings)
+	if len(f.s.st.Messages) != 1 || f.s.st.Messages[0].Attachment == nil {
+		t.Fatalf("old text backfilled: %v", f.s.st.Messages)
+	}
+}
+func TestFailedCommitRemovesPreparedFilesAndRestoresState(t *testing.T) {
+	f := setup(t)
+	if _, e := f.s.db.Exec("CREATE TRIGGER reject_messages BEFORE INSERT ON records WHEN NEW.kind='message' BEGIN SELECT RAISE(ABORT,'synthetic disk failure'); END"); e != nil {
+		t.Fatal(e)
+	}
+	var b bytes.Buffer
+	mw := multipart.NewWriter(&b)
+	meta, _ := mw.CreateFormField("metadata")
+	json.NewEncoder(meta).Encode(map[string]any{"body": "failed", "to_agent_ids": []string{f.ids["bob"]}})
+	part, _ := mw.CreateFormFile("file", "fail.bin")
+	part.Write([]byte("binary"))
+	mw.Close()
+	r := httptest.NewRequest("POST", "/api/v1/messages/direct", &b)
+	r.RemoteAddr = "192.0.2.10:1"
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	r.Header.Set("Authorization", "Bearer "+f.keys["alice"])
+	w := httptest.NewRecorder()
+	f.s.Handler().ServeHTTP(w, r)
+	if w.Code != 500 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if len(f.s.st.Messages) != 0 || len(f.s.st.Channels) != 0 || len(f.s.st.Deliveries) != 0 || len(f.s.st.Latest) != 0 {
+		t.Fatal("rollback left state")
+	}
+	entries, e := os.ReadDir(filepath.Join(f.s.opts.DataDir, "files"))
+	if e != nil || len(entries) != 0 {
+		t.Fatal("orphaned prepared files", entries, e)
+	}
+	f.s.db.Exec("DROP TRIGGER reject_messages")
+	f.send("success", f.ids["bob"])
+}
+func TestSlowUnauthenticatedBodyDoesNotBlockHealth(t *testing.T) {
+	f := setup(t)
+	reader, writer := io.Pipe()
+	r := httptest.NewRequest("POST", "/admin/api/login", reader)
+	done := make(chan struct{})
+	go func() { defer close(done); f.s.Handler().ServeHTTP(httptest.NewRecorder(), r) }()
+	writer.Write([]byte(`{"password":"`))
+	health := make(chan int, 1)
+	go func() {
+		w := httptest.NewRecorder()
+		f.s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/healthz", nil))
+		health <- w.Code
+	}()
+	select {
+	case code := <-health:
+		if code != 200 {
+			t.Fatal(code)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("slow login body holds state lock")
+	}
+	writer.Close()
+	<-done
+}
+
+type pausedWriter struct {
+	header  http.Header
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (w *pausedWriter) Header() http.Header { return w.header }
+func (w *pausedWriter) WriteHeader(int)     {}
+func (w *pausedWriter) Write(p []byte) (int, error) {
+	select {
+	case w.entered <- struct{}{}:
+	default:
+	}
+	<-w.release
+	return len(p), nil
+}
+func TestSlowResponseDoesNotBlockPolling(t *testing.T) {
+	f := setup(t)
+	f.send("history", f.ids["bob"])
+	r := httptest.NewRequest("GET", "/api/v1/channels/"+f.s.st.Messages[0].ChannelID+"/messages", nil)
+	r.RemoteAddr = "192.0.2.10:1"
+	r.Header.Set("Authorization", "Bearer "+f.keys["bob"])
+	w := &pausedWriter{http.Header{}, make(chan struct{}, 1), make(chan struct{})}
+	done := make(chan struct{})
+	go func() { defer close(done); f.s.Handler().ServeHTTP(w, r) }()
+	<-w.entered
+	health := make(chan int, 1)
+	go func() { status, _ := f.call("GET", "/api/v1/inbox", f.keys["bob"], nil); health <- status }()
+	select {
+	case status := <-health:
+		if status != 200 {
+			t.Fatal(status)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("slow response holds state lock")
+	}
+	close(w.release)
+	<-done
+}
+func TestLatestHistoryOrderAndPageBounds(t *testing.T) {
+	f := setup(t)
+	f.send("first", f.ids["bob"])
+	f.send("last", f.ids["bob"])
+	ch := f.s.st.Messages[0].ChannelID
+	out := f.must("GET", "/api/v1/channels/"+ch+"/messages?order=newest&limit=1", f.keys["bob"], nil)
+	if out["messages"].([]any)[0].(map[string]any)["body"] != "last" {
+		t.Fatal(out)
+	}
+	next := out["next_cursor"].(string)
+	out = f.must("GET", "/api/v1/channels/"+ch+"/messages?order=newest&limit=1&cursor="+next, f.keys["bob"], nil)
+	if out["messages"].([]any)[0].(map[string]any)["body"] != "first" {
+		t.Fatal(out)
+	}
+	for _, path := range []string{"channels", "groups", "inbox", "directory"} {
+		if status, _ := f.call("GET", "/api/v1/"+path+"?limit=0", f.keys["bob"], nil); status != 400 {
+			t.Fatalf("%s: %d", path, status)
+		}
+	}
+}
+func TestStartupOrphanCleanupCanRetry(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "files", "orphan"), 0700)
+	os.WriteFile(filepath.Join(dir, "files", "orphan", "blocked"), []byte("synthetic"), 0600)
+	s, e := Open(Options{DataDir: dir, AdminPassword: testPassword})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer s.Close()
+	if len(s.st.Deletions) != 1 || s.cleanupError == "" {
+		t.Fatal("orphan failure not tracked", s.st.Deletions)
+	}
+	os.Remove(filepath.Join(dir, "files", "orphan", "blocked"))
+	s.mu.Lock()
+	s.cleanup()
+	s.mu.Unlock()
+	if len(s.st.Deletions) != 0 || s.cleanupError != "" {
+		t.Fatal("cleanup retry did not recover")
+	}
+}
+func TestConfiguredLargeUnicodeBodyEncodingFits(t *testing.T) {
+	f := setup(t)
+	settings := f.s.st.Settings
+	settings.BodyCodepoints = 120000
+	f.must("PUT", "/admin/api/settings", testPassword, settings)
+	body := strings.Repeat(`\ud83d\ude00`, 100000)
+	raw := `{"to_agent_ids":["` + f.ids["bob"] + `"],"body":"` + body + `"}`
+	r := httptest.NewRequest("POST", "/api/v1/messages/direct", strings.NewReader(raw))
+	r.RemoteAddr = "192.0.2.10:1"
+	r.Header.Set("Authorization", "Bearer "+f.keys["alice"])
+	w := httptest.NewRecorder()
+	f.s.Handler().ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if len(f.s.st.Messages) != 1 || len([]rune(f.s.st.Messages[0].Body)) != 100000 {
+		t.Fatal("encoded Unicode did not round trip")
+	}
+}
+func TestPreparedUploadUsesCurrentStructuredLimits(t *testing.T) {
+	s := &Server{st: initial()}
+	s.st.Settings.BodyCodepoints = 1
+	s.st.Settings.Revision = 5
+	r := httptest.NewRequest("POST", "/api/v1/messages/direct", nil)
+	r = r.WithContext(context.WithValue(r.Context(), preparedKey{}, preparedSend{in: sendInput{Body: "ab"}}))
+	_, _, e := s.parseSend(r)
+	a, ok := e.(*apiError)
+	if !ok || a.Limit != 1 || a.SettingsRevision != 5 {
+		t.Fatal(e)
+	}
+	s.st.Settings.BodyCodepoints = 10
+	s.st.Settings.FileCount = 0
+	r = r.WithContext(context.WithValue(r.Context(), preparedKey{}, preparedSend{in: sendInput{Body: "ab"}, u: &upload{File: File{Size: 1}}}))
+	_, _, e = s.parseSend(r)
+	a, ok = e.(*apiError)
+	if !ok || a.Code != "files_disabled" || a.Limit != 0 {
+		t.Fatal(e)
+	}
+}
+func TestDownloadRequiresCurrentMembershipAndDoesNotACK(t *testing.T) {
+	f := setup(t)
+	data := []byte{0, 1, 255}
+	f.upload(data, []string{f.ids["bob"]})
+	m := f.s.st.Messages[0]
+	for _, who := range []string{"bob", "carol"} {
+		r := httptest.NewRequest("GET", "/api/v1/files/"+m.Attachment.ID+"/content", nil)
+		r.RemoteAddr = "192.0.2.10:1"
+		r.Header.Set("Authorization", "Bearer "+f.keys[who])
+		w := httptest.NewRecorder()
+		f.s.Handler().ServeHTTP(w, r)
+		if who == "bob" {
+			if w.Code != 200 || !bytes.Equal(w.Body.Bytes(), data) {
+				t.Fatal(w.Code, w.Body.Bytes())
+			}
+		} else if w.Code != 404 {
+			t.Fatal(w.Code)
+		}
+	}
+	out := f.must("GET", "/api/v1/inbox", f.keys["bob"], nil)
+	if out["unread"] != float64(1) {
+		t.Fatal("download ACKed", out)
+	}
 }

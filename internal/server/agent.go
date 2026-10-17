@@ -75,14 +75,23 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 		return map[string]any{"agents": out, "next_cursor": next}, nil
 	}
 	if p == "channels" && r.Method == "GET" {
+		n, c, e := page(r, s.st.Settings.PageSize)
+		if e != nil {
+			return nil, e
+		}
 		out := []*Channel{}
 		for id, ch := range s.st.Channels {
-			if s.authorized(a.ID, id) {
+			if s.authorized(a.ID, id) && id > c {
 				out = append(out, ch)
 			}
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-		return map[string]any{"channels": out}, nil
+		next := ""
+		if len(out) > n {
+			next = cursor(out[n-1].ID)
+			out = out[:n]
+		}
+		return map[string]any{"channels": out, "next_cursor": next}, nil
 	}
 	if p == "messages/direct" && r.Method == "POST" {
 		return s.direct(r, a)
@@ -109,7 +118,17 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 		if e != nil {
 			return nil, e
 		}
+		order := r.URL.Query().Get("order")
+		if order == "" {
+			order = "oldest"
+		}
+		if order != "oldest" && order != "newest" {
+			return nil, bad("invalid_order")
+		}
 		seq := int64(0)
+		if order == "newest" {
+			seq = 1<<63 - 1
+		}
 		if c != "" {
 			seq, e = strconv.ParseInt(c, 10, 64)
 			if e != nil {
@@ -122,8 +141,13 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 		out := []any{}
 		last := int64(0)
 		next := ""
-		for _, m := range s.st.Messages {
-			if m.ChannelID != ch || m.Sequence <= seq || parts[2] == "files" && m.Attachment == nil {
+		for i := 0; i < len(s.st.Messages); i++ {
+			index := i
+			if order == "newest" {
+				index = len(s.st.Messages) - 1 - i
+			}
+			m := s.st.Messages[index]
+			if m.ChannelID != ch || (order == "oldest" && m.Sequence <= seq || order == "newest" && m.Sequence >= seq) || parts[2] == "files" && m.Attachment == nil {
 				continue
 			}
 			if len(out) == n {
@@ -195,11 +219,25 @@ func (s *Server) inbox(r *http.Request, a *storedAgent) (any, error) {
 			v["claimable"] = v["claimable"].(int) + 1
 		}
 	}
-	channels := []any{}
-	for _, v := range by {
-		channels = append(channels, v)
+	n, c, e := page(r, s.st.Settings.PageSize)
+	if e != nil {
+		return nil, e
 	}
-	return map[string]any{"unread": unread, "claimable": claimable, "leased": leased, "channels": channels}, nil
+	channels := []any{}
+	for id, v := range by {
+		if id > c {
+			channels = append(channels, v)
+		}
+	}
+	sort.Slice(channels, func(i, j int) bool {
+		return channels[i].(map[string]any)["channel_id"].(string) < channels[j].(map[string]any)["channel_id"].(string)
+	})
+	next := ""
+	if len(channels) > n {
+		next = cursor(channels[n-1].(map[string]any)["channel_id"].(string))
+		channels = channels[:n]
+	}
+	return map[string]any{"unread": unread, "claimable": claimable, "leased": leased, "channels": channels, "next_cursor": next}, nil
 }
 func (s *Server) claim(r *http.Request, a *storedAgent) (any, error) {
 	in := struct {

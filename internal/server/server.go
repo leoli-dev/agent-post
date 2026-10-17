@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -28,11 +29,13 @@ type Options struct {
 	SecureCookies bool
 	AdminHandler  http.Handler
 }
+type adminVerifiedKey struct{}
 type session struct {
 	CSRF    string
 	Expires time.Time
 }
 type Server struct {
+	authSlots         chan struct{}
 	activeUploads     int
 	temporaryReserved int64
 	persisted         map[string]string
@@ -66,7 +69,7 @@ func Open(o Options) (*Server, error) {
 	if e := os.Chmod(o.DataDir, 0700); e != nil {
 		return nil, e
 	}
-	s := &Server{opts: o, sessions: map[string]session{}, now: time.Now}
+	s := &Server{opts: o, sessions: map[string]session{}, now: time.Now, authSlots: make(chan struct{}, 4)}
 	var e error
 	s.lock, e = sql.Open("sqlite", filepath.Join(o.DataDir, "process-lock.sqlite"))
 	if e != nil {
@@ -114,6 +117,15 @@ func Open(o Options) (*Server, error) {
 			return nil, e
 		}
 	}
+	for _, m := range s.st.Messages {
+		if m.Attachment != nil {
+			info, err := os.Lstat(filepath.Join(o.DataDir, "files", m.Attachment.ID))
+			if err != nil || !info.Mode().IsRegular() || info.Size() != m.Attachment.Size {
+				s.Close()
+				return nil, fmt.Errorf("retained attachment is missing or incomplete; repair storage before reopening")
+			}
+		}
+	}
 	// Nothing in staging is committed; unowned files are interrupted materializations.
 	for _, dir := range []string{"staging", "files"} {
 		entries, err := os.ReadDir(filepath.Join(o.DataDir, dir))
@@ -130,10 +142,18 @@ func Open(o Options) (*Server, error) {
 		for _, f := range entries {
 			if dir == "staging" || !owned[f.Name()] {
 				if err = os.Remove(filepath.Join(o.DataDir, dir, f.Name())); err != nil {
-					s.cleanupError = "unreferenced file cleanup failed"
+					if dir == "files" {
+						s.queueDelete(f.Name())
+					} else {
+						s.cleanupError = "staging cleanup failed"
+					}
 				}
 			}
 		}
+	}
+	if e = s.save(); e != nil {
+		s.Close()
+		return nil, e
 	}
 	s.cleanup()
 	return s, nil
@@ -165,6 +185,10 @@ func fail(w http.ResponseWriter, e error) {
 	}
 	status := 400
 	switch a.Code {
+	case "internal_error":
+		status = 500
+	case "authentication_capacity", "storage_unavailable":
+		status = 503
 	case "unauthorized":
 		status = 401
 	case "source_ip_denied", "forbidden", "not_group_member", "not_invited", "csrf_required":
@@ -179,7 +203,7 @@ func fail(w http.ResponseWriter, e error) {
 	output(w, status, map[string]any{"error": a})
 }
 func decode(r *http.Request, v any) error {
-	b, e := ioReadBounded(r.Body, 1<<20)
+	b, e := ioReadBounded(r.Body, maxJSONBytes)
 	if e != nil {
 		return bad("invalid_json")
 	}
@@ -221,20 +245,67 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			staging := &Server{opts: s.opts, st: state{Settings: settings}, cleanupError: cleanupErr}
 			in, u, e := staging.parseSend(r)
 			if u != nil {
-				defer os.Remove(u.Path)
+				defer s.releaseStaging(u.Path)
 			}
 			if e != nil {
 				fail(w, e)
 				return
 			}
+			if u != nil {
+				n := 1
+				if r.URL.Path == "/api/v1/messages/direct" {
+					if len(in.To) == 0 || len(in.To) > settings.DirectRecipients {
+						fail(w, bad("invalid_recipients"))
+						return
+					}
+					n = len(in.To)
+				}
+				staging.prepareFiles(u, n)
+				defer s.releasePrepared(u)
+			}
 			r = r.WithContext(context.WithValue(r.Context(), preparedKey{}, preparedSend{in, u}))
 		} else {
-			b, e := ioReadBounded(r.Body, 1<<20)
+			b, e := ioReadBounded(r.Body, maxJSONBytes)
 			if e != nil {
 				fail(w, e)
 				return
 			}
 			r.Body = io.NopCloser(bytes.NewReader(b))
+		}
+	}
+	if strings.HasPrefix(r.URL.Path, "/admin/api/") {
+		password := ""
+		verify := false
+		if r.URL.Path == "/admin/api/login" && r.Method == "POST" {
+			var in struct {
+				Password string `json:"password"`
+			}
+			b, e := ioReadBounded(r.Body, maxJSONBytes)
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(b))
+			if e = strictJSON(b, &in); e != nil {
+				fail(w, e)
+				return
+			}
+			password = in.Password
+			verify = true
+		} else if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+			password = strings.TrimPrefix(h, "Bearer ")
+			verify = true
+		}
+		if verify {
+			select {
+			case s.authSlots <- struct{}{}:
+			default:
+				fail(w, bad("authentication_capacity"))
+				return
+			}
+			valid := s.validAdmin(password)
+			<-s.authSlots
+			r = r.WithContext(context.WithValue(r.Context(), adminVerifiedKey{}, valid))
 		}
 	}
 	s.mu.Lock()
@@ -245,7 +316,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	if r.URL.Path == "/healthz" && r.Method == "GET" {
-		output(w, 200, map[string]any{"status": "ok", "cleanup": s.cleanupState()})
+		v := map[string]any{"status": "ok", "cleanup": s.cleanupState()}
+		held = false
+		s.mu.Unlock()
+		output(w, 200, v)
 		return
 	}
 	// Roll back in-memory mutations if persistence fails. No successful response precedes save.
@@ -268,17 +342,29 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		var restored state
 		json.Unmarshal(before, &restored)
 		s.st = restored
+		held = false
+		s.mu.Unlock()
 		fail(w, err)
 		return
 	}
 	if err = s.save(); err != nil {
+		if d, ok := result.(*download); ok {
+			d.file.Close()
+		}
 		var restored state
 		json.Unmarshal(before, &restored)
 		s.st = restored
+		held = false
+		s.mu.Unlock()
 		fail(w, err)
 		return
 	}
 	s.cleanup()
+	if v, ok := result.(map[string]any); ok {
+		if _, has := v["cleanup"]; has {
+			v["cleanup"] = s.cleanupState()
+		}
+	}
 	if d, ok := result.(*download); ok {
 		held = false
 		s.mu.Unlock()
@@ -289,10 +375,22 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if result != nil {
-		output(w, 200, result)
+		b, e := json.Marshal(result)
+		held = false
+		s.mu.Unlock()
+		if e != nil {
+			fail(w, e)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.Write(append(b, '\n'))
 	}
 }
 func (s *Server) authenticate(r *http.Request) (*storedAgent, error) {
+	if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+		return nil, bad("unauthorized")
+	}
 	h := digest(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 	var a *storedAgent
 	for _, v := range s.st.Agents {
@@ -334,11 +432,37 @@ func (s *Server) cleanupState() any {
 	return map[string]any{"pending_files": len(s.st.Deletions), "last_error": s.cleanupError}
 }
 func (s *Server) cleanup() {
+	if s.activeUploads == 0 {
+		entries, e := os.ReadDir(filepath.Join(s.opts.DataDir, "staging"))
+		failed := e != nil
+		for _, f := range entries {
+			if e = os.Remove(filepath.Join(s.opts.DataDir, "staging", f.Name())); e != nil {
+				failed = true
+			}
+		}
+		if failed {
+			s.cleanupError = "staging cleanup failed"
+		} else if s.cleanupError == "staging cleanup failed" {
+			s.cleanupError = ""
+		}
+	}
+
 	pending := []string{}
+	previous := append([]string{}, s.st.Deletions...)
 	for _, id := range s.st.Deletions {
 		e := os.Remove(filepath.Join(s.opts.DataDir, "files", id))
 		if e != nil && !os.IsNotExist(e) {
 			pending = append(pending, id)
+		}
+	}
+	if len(previous) > 0 && runtime.GOOS != "windows" {
+		dir, e := os.Open(filepath.Join(s.opts.DataDir, "files"))
+		if e == nil {
+			e = dir.Sync()
+			dir.Close()
+		}
+		if e != nil {
+			pending = previous
 		}
 	}
 	s.st.Deletions = pending
@@ -348,4 +472,13 @@ func (s *Server) cleanup() {
 		s.cleanupError = ""
 	}
 	s.save()
+}
+
+func (s *Server) queueDelete(id string) {
+	for _, v := range s.st.Deletions {
+		if v == id {
+			return
+		}
+	}
+	s.st.Deletions = append(s.st.Deletions, id)
 }

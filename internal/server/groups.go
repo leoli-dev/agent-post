@@ -10,16 +10,25 @@ import (
 func (s *Server) groups(r *http.Request, a *storedAgent, p string) (any, error) {
 	parts := strings.Split(p, "/")
 	if len(parts) == 1 && r.Method == "GET" {
+		n, c, e := page(r, s.st.Settings.PageSize)
+		if e != nil {
+			return nil, e
+		}
 		out := []any{}
 		for _, g := range s.st.Groups {
-			if status := g.Members[a.ID]; status == "active" || status == "pending" {
+			if status := g.Members[a.ID]; g.ID > c && (status == "active" || status == "pending") {
 				out = append(out, map[string]any{"id": g.ID, "name": g.Name, "owner_id": g.OwnerID, "membership": status})
 			}
 		}
 		sort.Slice(out, func(i, j int) bool {
 			return out[i].(map[string]any)["id"].(string) < out[j].(map[string]any)["id"].(string)
 		})
-		return map[string]any{"groups": out}, nil
+		next := ""
+		if len(out) > n {
+			next = cursor(out[n-1].(map[string]any)["id"].(string))
+			out = out[:n]
+		}
+		return map[string]any{"groups": out, "next_cursor": next}, nil
 	}
 	if len(parts) == 1 && r.Method == "POST" {
 		var in struct {

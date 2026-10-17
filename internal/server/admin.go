@@ -17,8 +17,16 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) (any, error) {
 		if e := decode(r, &in); e != nil {
 			return nil, e
 		}
-		if !s.validAdmin(in.Password) {
+		if valid, _ := r.Context().Value(adminVerifiedKey{}).(bool); !valid {
 			return nil, bad("unauthorized")
+		}
+		for id, sess := range s.sessions {
+			if !sess.Expires.After(s.now()) {
+				delete(s.sessions, id)
+			}
+		}
+		if len(s.sessions) >= 1024 {
+			return nil, bad("authentication_capacity")
 		}
 		id, csrf := secret("ses_"), secret("csrf_")
 		s.sessions[id] = session{csrf, s.now().Add(8 * time.Hour)}
@@ -28,7 +36,7 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) (any, error) {
 	bearer := r.Header.Get("Authorization")
 	admin := false
 	if strings.HasPrefix(bearer, "Bearer ") {
-		admin = s.validAdmin(strings.TrimPrefix(bearer, "Bearer "))
+		admin, _ = r.Context().Value(adminVerifiedKey{}).(bool)
 	}
 	var sess session
 	if !admin {
@@ -101,6 +109,14 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) (any, error) {
 		}
 		if len(h.Name) < 1 || len(h.Name) > 128 || len(h.OS) > 128 || len(h.IPs) == 0 || len(h.IPs) > 64 {
 			return nil, bad("invalid_host")
+		}
+		if len(h.Metadata) > 64 {
+			return nil, bad("invalid_host_metadata")
+		}
+		for k, v := range h.Metadata {
+			if len(k) > 128 || len(v) > 4096 {
+				return nil, bad("invalid_host_metadata")
+			}
 		}
 		for i, v := range h.IPs {
 			ip, e := netip.ParseAddr(v)
