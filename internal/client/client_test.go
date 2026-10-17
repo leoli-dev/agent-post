@@ -96,7 +96,7 @@ func TestRedirectDoesNotLeakKey(t *testing.T) {
 	}
 }
 func TestConfigValidation(t *testing.T) {
-	for _, u := range []string{"", "https://user:pass@example.com", "https://example.com/path", "ftp://example.com", "https://example.com?secret=x"} {
+	for _, u := range []string{"", "https://user:pass@example.com", "https://example.com/path", "ftp://example.com", "https://example.com?secret=x", "https://example.com?", "https://example.com#", "https://example.com/%2F"} {
 		if _, e := New(Config{u, "key"}); e == nil {
 			t.Errorf("accepted %q", u)
 		}

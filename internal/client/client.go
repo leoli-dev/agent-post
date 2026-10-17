@@ -82,7 +82,7 @@ type Client struct {
 
 func New(c Config) (*Client, error) {
 	u, err := url.Parse(c.URL)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(c.URL, "#") || (u.EscapedPath() != "" && u.EscapedPath() != "/") {
 		return nil, errors.New("url must be an absolute http(s) service origin without credentials, path, query or fragment")
 	}
 	if c.APIKey == "" || strings.ContainsAny(c.APIKey, "\r\n\t ") {
