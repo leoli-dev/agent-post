@@ -84,7 +84,7 @@ limit or universal capacity guarantee. See the actual [test evidence](docs/valid
 | --- | --- |
 | [Runtime guide](docs/runtime.md) | Build, administration, client configuration, lifecycle, and actual API shapes |
 | [Generated OpenAPI](docs/openapi.json) | HTTP request schemas from the shared CLI/MCP operation registry |
-| [Requirements](docs/requirements.md) | Stable REQ-01 through REQ-52 and confirmed product decisions |
+| [Requirements](docs/requirements.md) | Stable REQ-01 through REQ-53 and confirmed product decisions |
 | [Architecture](docs/architecture.md) / [protocol](docs/protocol.md) | Design rationale, separate from actual test evidence |
 | [Implementation plan](docs/implementation-plan.md) | Sequencing and original proposed defaults |
 | [Acceptance](docs/acceptance.md) / [validation](docs/validation.md) | Acceptance specification and executed checks |

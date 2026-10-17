@@ -50,11 +50,11 @@ for document in documents:
             errors.append(f"{relative}: broken local link: {target}")
 
 requirements = (ROOT / "docs/requirements.md").read_text(encoding="utf-8")
-for number in range(1, 53):
+for number in range(1, 54):
     if f"REQ-{number:02d}" not in requirements:
         errors.append(f"docs/requirements.md: missing REQ-{number:02d}")
 
 if errors:
     print("\n".join(errors), file=sys.stderr)
     raise SystemExit(1)
-print(f"Documentation checks passed: {len(documents)} Markdown files; REQ-01..REQ-52 present.")
+print(f"Documentation checks passed: {len(documents)} Markdown files; REQ-01..REQ-53 present.")

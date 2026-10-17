@@ -83,6 +83,10 @@ The selected direction is a new, agent-first communication service. Earlier rese
 - **REQ-51 — New open-source repository.** Start a fresh source repository in the maintainer's development workspace and prepare it as a formal open-source project that others can install and use.
 - **REQ-52 — Development records and planning.** Initialize a project scope in the maintainer development log and archive the available research, confirmed requirements, and findings as notes. The initial authorization covered planning and project documentation. Implementation was authorized subsequently; this requirement records the original preparation scope, while actual implementation evidence is documented separately.
 
+## Administration localization
+
+- **REQ-53 — Multilingual administration UI.** Provide the administrator management web UI in English, French, Simplified Chinese, Traditional Chinese, Italian, Spanish, and Russian. This requirement was added after the initial implementation; existing requirement IDs remain unchanged.
+
 ## Confirmed decisions versus proposals and defaults
 
 Every numbered requirement above records a confirmed user decision. Explicitly confirmed defaults include the 60-second claim duration in REQ-28 and oldest-first ordering in REQ-26. The 100 requests-per-second value in REQ-49 is a confirmed test target, not a default rate limit or a benchmark result.
