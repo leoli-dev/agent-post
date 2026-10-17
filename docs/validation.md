@@ -112,3 +112,24 @@ power-loss testing. Current implementation limits include an in-memory working
 set, O(retained-state) scans/serialization, no total disk quota, no administrator
 password-rotation operation, and no owner transfer or group dissolution. See
 [runtime](runtime.md) for the operational contract.
+
+## Source publication and hosted CI
+
+The source repository is public at [leoli-dev/agent-post](https://github.com/leoli-dev/agent-post),
+with `main` as its default branch. GitHub private vulnerability reporting is
+enabled. No versioned binary Release was created.
+
+The first hosted run passed Linux and macOS native build/vet/race jobs and
+the generated-contract/real-service smoke job. Its Windows application tests
+passed except the executable-subprocess test, which lacked a `.exe` suffix.
+Test-only commit `f4847fb2b0b4dca7eb057584da2e41e04f142b73` corrected the native
+executable name, passed local focused race tests, and received independent review.
+The application runtime is unchanged from the measured revision.
+
+[The corrected application run](https://github.com/leoli-dev/agent-post/actions/runs/39072955736)
+completed successfully at `f4847fb`: all three native build/vet/race jobs
+(`ubuntu-latest`, `macos-latest`, `windows-latest`) and the Linux generated-contract
+plus real-service smoke job passed. [Documentation CI](https://github.com/leoli-dev/agent-post/actions/runs/39072955650)
+also passed. These are actual hosted native test results; they do not certify
+every OS/architecture pair, named agent application, installer, or power-loss
+scenario in the release acceptance specification.
