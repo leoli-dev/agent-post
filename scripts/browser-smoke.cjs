@@ -62,6 +62,7 @@ async function main() {
     assert.notEqual(await page.getByLabel('New API key', { exact: true }).inputValue(), oldKey);
     assert.equal((await fetch(`${base}/api/v1/me`, { headers: { Authorization: `Bearer ${oldKey}` } })).status, 401);
     await page.getByRole('button', { name: 'I saved the key', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#issued-key').value === '');
     assert.equal(await page.locator('#issued-key').inputValue(), '');
     await page.getByRole('button', { name: 'Disable', exact: true }).click();
     await page.locator('#confirm-action').click();
