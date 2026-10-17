@@ -34,7 +34,7 @@ async function main() {
     }
     assert.ok(ready, 'service starts');
     browser = await chromium.launch({ headless: true, ...(process.env.AGENT_POST_CHROMIUM ? { executablePath: process.env.AGENT_POST_CHROMIUM } : {}) });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    const page = await browser.newPage({ locale: 'en-US', viewport: { width: 1440, height: 1000 } });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(`${base}/admin/`);
     await page.getByLabel('Administrator password').fill(password);
