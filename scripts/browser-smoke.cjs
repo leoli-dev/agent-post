@@ -40,7 +40,7 @@ async function main() {
     await page.goto(`${base}/admin/`);
     await page.getByLabel('Administrator password').fill(password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await page.getByRole('heading', { name: 'Ready when your agents are.' }).waitFor();
+    await page.getByRole('heading', { name: 'Overview', exact: true }).waitFor();
     await page.getByRole('link', { name: 'Hosts', exact: true }).click();
     await page.getByRole('button', { name: 'Register host', exact: true }).click();
     assert.equal(await page.evaluate(() => document.activeElement.id), 'host-name', 'host dialog focuses its first field');
@@ -106,6 +106,9 @@ async function main() {
     if (process.env.AGENT_POST_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.AGENT_POST_SCREENSHOT_DIR, 'admin-mobile.png'), fullPage: true });
     await page.getByRole('link', { name: 'Agents', exact: true }).click();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile agent table scrolls inside its panel');
+    assert.equal(await page.getByRole('button', { name: 'Sign out', exact: true }).isVisible(), false, 'mobile account controls stay in the menu');
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    assert.equal(await page.locator('#menu-toggle').getAttribute('aria-expanded'), 'true');
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await page.getByLabel('Administrator password').waitFor();
     assert.deepEqual(errors, []);

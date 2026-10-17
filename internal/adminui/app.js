@@ -49,11 +49,29 @@ function notice(message, failed = false) {
   node.classList.toggle("failure", failed); node.hidden = false;
   noticeTimer = setTimeout(() => { node.hidden = true; }, failed ? 12000 : 5000);
 }
+function setMenu(open) {
+  $("#console").classList.toggle("menu-open", open);
+  $("#menu-toggle").setAttribute("aria-expanded", String(open));
+}
+function setPasswordVisible(show) {
+  const toggle = $("#password-toggle"), label = show ? "Hide password" : "Show password";
+  $("#password").type = show ? "text" : "password";
+  toggle.setAttribute("aria-pressed", String(show));
+  toggle.dataset.i18nAriaLabel = label; toggle.dataset.i18nTitle = label;
+  toggle.setAttribute("aria-label", t(label)); toggle.title = t(label);
+}
+let refreshedAt;
+function showRefreshed() {
+  if (!refreshedAt) return;
+  setMessage($("#refreshed"), "Updated {time}", {time: new Intl.DateTimeFormat(i18n.getLocale(), {timeStyle: "medium"}).format(refreshedAt)});
+}
 function showLogin() {
   csrf = "";
+  setMenu(false);
   $("#console").hidden = true;
   $("#login-view").hidden = false;
   $("#password").value = "";
+  setPasswordVisible(false);
   state = {hosts: [], agents: [], groups: [], settings: {}};
   document.querySelectorAll("dialog[open]").forEach(d => d.close());
 }
@@ -96,10 +114,16 @@ function button(text, action) {
   return node;
 }
 function statusCell(row, enabled) { const node = el("span", undefined, enabled ? "status" : "status off"); setMessage(node, enabled ? "Enabled" : "Disabled"); cell(row).append(node); }
+const pageTitles = {overview: "Overview", hosts: "Hosts", agents: "Agents", groups: "Groups", settings: "Limits & retention"};
 function route() {
-  const names = ["overview", "hosts", "agents", "groups", "settings"];
+  const names = Object.keys(pageTitles);
   const page = names.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
-  names.forEach(name => { $(`#${name}`).hidden = name !== page; });
+  // Section IDs differ from the hash so the browser never jumps to them.
+  const changed = $(`#page-${page}`).hidden;
+  names.forEach(name => { $(`#page-${name}`).hidden = name !== page; });
+  if (changed) window.scrollTo(0, 0);
+  setMessage($("#page-title"), pageTitles[page]);
+  setMenu(false);
   document.querySelectorAll("[data-page]").forEach(a => {
     if (a.dataset.page === page) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
@@ -170,7 +194,7 @@ function render() {
   }));
   setMessage($("#settings-revision"), "Settings revision {revision}", {revision: state.settings.revision || 1});
 }
-async function reload() { state = await api("state"); render(); }
+async function reload() { state = await api("state"); refreshedAt = new Date(); render(); showRefreshed(); }
 function editHost(host) {
   const form = $("#host-form"); form.reset();
   form.elements.id.value = host?.id || "";
@@ -254,6 +278,12 @@ $("#new-host").addEventListener("click", () => editHost());
 $("#new-agent").addEventListener("click", () => editAgent());
 $("#refresh").addEventListener("click", () => reload().then(() => notice("Data refreshed.")).catch(error => notice(error, true)));
 $("#cleanup-retry").addEventListener("click", () => api("cleanup", "POST", {}).then(reload).then(() => notice("Cleanup retried.")).catch(error => notice(error, true)));
+$("#menu-toggle").addEventListener("click", event => { event.stopPropagation(); setMenu(!$("#console").classList.contains("menu-open")); });
+document.addEventListener("click", event => { if (!event.target.closest("#account-panel, #menu-toggle")) setMenu(false); });
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && $("#console").classList.contains("menu-open")) { setMenu(false); $("#menu-toggle").focus(); }
+});
+$("#password-toggle").addEventListener("click", () => setPasswordVisible($("#password").type === "password"));
 $("#logout").addEventListener("click", async () => { try { await api("logout", "POST", {}); showLogin(); } catch (error) { notice(error, true); } });
 function setNumber(node, value) { node._i18nNumber = value; node.textContent = i18n.formatNumber(value); }
 function localizeValidity(control) {
@@ -273,6 +303,7 @@ document.addEventListener("input", event => { if (event.target.setCustomValidity
 window.addEventListener("agentpost:languagechange", () => {
   // Update text in place: no rerender, form reset, modal close or API request.
   document.querySelectorAll("[data-i18n-date]").forEach(node => { node.textContent = i18n.formatDate(node.dataset.i18nDate); });
+  showRefreshed();
   document.querySelectorAll("#host-count, #agent-count, #group-count").forEach(node => { if (node._i18nNumber !== undefined) node.textContent = i18n.formatNumber(node._i18nNumber); });
   document.querySelectorAll("[data-i18n]").forEach(node => { if (node._supportCode) node.textContent += ` ${t("Support code: {code}", {code: node._supportCode})}`; });
   document.querySelectorAll("input, select, textarea").forEach(control => { if (control.validity.customError) localizeValidity(control); });
