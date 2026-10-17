@@ -1,6 +1,6 @@
 # Implementation plan
 
-Status: proposed plan. This repository currently contains planning and contributor documents only. There is no application implementation, binary release, or passing application benchmark to report. [Requirements](requirements.md) records confirmed scope; these phases describe work sequencing, not a second progress tracker.
+Status: implementation sequencing and original design rationale. An initial application now exists; see [runtime](runtime.md) for its actual choices and [validation](validation.md) for executed checks. No binary release or cross-host integration is established by this plan. [Requirements](requirements.md) records confirmed scope; these phases describe work sequencing, not a second progress tracker.
 
 ## Intended product
 
@@ -12,7 +12,7 @@ The product does not orchestrate external tasks, inject sessions, push notificat
 
 Use Go, the standard HTTP server, embedded templates/assets for administration, SQLite on the central host's local disk, and managed attachment directories. Use a pure-Go SQLite driver and the official MCP Go SDK after dependency and cross-target validation. One executable is intended to provide server, CLI client, and local stdio MCP modes. No Node/Python runtime, external database daemon, Redis, message broker, or Docker installation should be required for the normal binary distribution.
 
-Go is a recommendation within the user's Go-or-Rust preference, not a user-confirmed language decision. Candidate dependency versions must be pinned during the first buildable implementation step; there is deliberately no speculative module lockfile yet. [Architecture](architecture.md) and [distribution](distribution.md) explain the rationale and verification boundary.
+Go is a recommendation within the user's Go-or-Rust preference, not a user-confirmed language decision. Actual dependency versions are now pinned in `go.mod` and `go.sum`. The proposal below remains distinct from user-confirmed product requirements. [Architecture](architecture.md) and [distribution](distribution.md) explain the rationale and verification boundary.
 
 ## Proposed defaults requiring review
 
@@ -38,7 +38,7 @@ Other proposed defaults: one bootstrap admin; per-host unique agent labels with 
 
 ## Phase P0 — freeze the minimal contract
 
-Review the proposed defaults and unresolved owner/account lifecycle boundaries. Specify body/file comparison fields, deletion ordering, error outcomes after purge, and partial retry behavior. Define request/response schemas, bounded pagination/batches, and a stable error taxonomy. Produce the versioned OpenAPI and matching MCP/CLI operation schema from one contract source. A design review must explicitly acknowledge that latest-content suppression is weaker than request idempotency.
+Adopt and document initial defaults and the owner/account lifecycle boundaries. Specify body/file comparison fields, deletion ordering, error outcomes after purge, and partial retry behavior. Define request/response schemas, bounded pagination/batches, and a stable error taxonomy. Produce the versioned OpenAPI and matching MCP/CLI operation schema from one contract source. A design review must explicitly acknowledge that latest-content suppression is weaker than request idempotency.
 
 ## Phase P1 — buildable core and identities
 
@@ -66,7 +66,7 @@ Provide the embedded, accessible admin interface for setup, hosts, accounts/keys
 
 Run the [acceptance specification](acceptance.md), ordinary-API 100 RPS mixed-load test, file throughput/admission tests, restart/crash tests, and native cross-platform smoke tests. Record hardware, versions, settings, duration, workload, error rate, and latency percentiles. Exercise representative Desktop/CLI and multiple-profile clients with synthetic accounts before claims of interoperability.
 
-Prepare the [distribution](distribution.md): versioned binaries, checksums, licenses/notices, release notes, configuration reference, upgrade/migration steps, and uninstall/data-removal instructions. Source hosting and public publishing are separate actions; this planning work does not publish a repository or software release.
+Prepare the [distribution](distribution.md): versioned binaries, checksums, licenses/notices, release notes, configuration reference, upgrade/migration steps, and uninstall/data-removal instructions. Source hosting and binary release publishing are separate actions; the validation report identifies which has occurred.
 
 ## Review boundaries
 

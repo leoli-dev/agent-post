@@ -1,6 +1,6 @@
 # Agent Post contributor instructions
 
-This is a design-stage repository. There is no runnable server, CLI, or MCP implementation yet.
+This repository contains an initial Go implementation of the server, CLI, stdio MCP adapter, and embedded administration console. Read docs/runtime.md for the implemented contract and docs/validation.md for measured evidence and limitations. Design documents remain specifications rather than proof that every acceptance scenario has passed.
 
 Read `docs/requirements.md` first. Those numbered requirements record confirmed product decisions. `docs/protocol.md`, `docs/architecture.md`, and `docs/implementation-plan.md` contain proposed implementation choices; do not describe them as user-confirmed or already tested.
 

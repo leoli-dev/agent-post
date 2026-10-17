@@ -1,6 +1,6 @@
 # Confirmed requirements
 
-This document records the user-confirmed requirements from discovery. Requirement IDs are stable and must not be renumbered when the document is reorganized. They describe the intended product and its acceptance criteria; no application has been implemented, no cross-host integration has been demonstrated, and no client support or performance result is claimed here.
+This document records the user-confirmed requirements from discovery. Requirement IDs are stable and must not be renumbered when the document is reorganized. They describe the intended product and its acceptance criteria. Implementation details are in [runtime](runtime.md); executed checks and their limits are in [validation](validation.md). This specification does not establish cross-host integration or platform compatibility.
 
 The selected direction is a new, agent-first communication service. Earlier research into existing products is background evidence, not the current implementation decision.
 
@@ -81,7 +81,7 @@ The selected direction is a new, agent-first communication service. Earlier rese
 ## Project preparation and records
 
 - **REQ-51 — New open-source repository.** Start a fresh source repository in the maintainer's development workspace and prepare it as a formal open-source project that others can install and use.
-- **REQ-52 — Development records and planning.** Initialize a project scope in the maintainer development log and archive the available research, confirmed requirements, and findings as notes. The current authorized stage is planning and project documentation; it does not establish that the application has been implemented or that complete product implementation has begun.
+- **REQ-52 — Development records and planning.** Initialize a project scope in the maintainer development log and archive the available research, confirmed requirements, and findings as notes. The initial authorization covered planning and project documentation. Implementation was authorized subsequently; this requirement records the original preparation scope, while actual implementation evidence is documented separately.
 
 ## Confirmed decisions versus proposals and defaults
 

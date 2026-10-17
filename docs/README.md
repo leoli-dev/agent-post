@@ -1,14 +1,17 @@
-# Design documents
+# Documentation
 
-Agent Post is currently a documented proposal. These documents do not imply that executable software, installers, benchmarks, or releases exist.
+Start with the runtime guide for the initial implementation. Design documents
+record product decisions and rationale; validation records executed evidence.
+Task status is maintained separately from public design and acceptance documents.
 
 | Document | Purpose |
 | --- | --- |
-| [Requirements](requirements.md) | Confirmed requirements, with stable REQ identifiers |
-| [Architecture](architecture.md) | Proposed service, storage, and client boundaries |
-| [Protocol](protocol.md) | Proposed API contracts, state transitions, and permissions |
-| [Implementation plan](implementation-plan.md) | Work sequencing, proposed defaults, and review boundaries |
+| [Runtime](runtime.md) | Build, run, administer, and connect CLI/MCP clients |
+| [OpenAPI](openapi.json) | Generated HTTP request contract shared with CLI/MCP schemas |
+| [Validation](validation.md) | Executed checks, local characterization, and limits |
+| [Requirements](requirements.md) | Confirmed requirements with stable REQ identifiers |
+| [Architecture](architecture.md) | Service, storage, and client design rationale |
+| [Protocol](protocol.md) | Protocol rationale and state transitions |
+| [Implementation plan](implementation-plan.md) | Work sequencing and original default proposals |
 | [Acceptance](acceptance.md) | Functional, concurrency, failure, and performance specifications |
-| [Distribution](distribution.md) | Proposed cross-platform packaging and release requirements |
-
-Implementation proposals may change during review; confirmed requirements must remain traceable. Task status is maintained separately from these design documents.
+| [Distribution](distribution.md) | Packaging and platform release evidence requirements |

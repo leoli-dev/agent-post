@@ -1,8 +1,9 @@
 # Proposed distribution and release policy
 
-This repository is in the planning stage. The executable, dependencies, release
-artifacts, and platform support described here are proposed. There is no
-implementation or tested release implied by this document. See
+This document preserves the proposed release policy. The initial source
+implementation can now be built as described in [runtime](runtime.md);
+[validation](validation.md) records actual tests. Platform support and binary
+release artifacts below remain targets until separately verified. See
 [requirements](requirements.md), [architecture](architecture.md),
 [implementation plan](implementation-plan.md), and [acceptance](acceptance.md).
 
@@ -29,9 +30,9 @@ fan-out outcomes.
 
 ## Candidate toolchain and dependencies
 
-These are research records as of 2026-10-17, not dependency pins in this
-repository. The actual dependency graph, lock information, build configuration,
-and CI remain to be implemented and reviewed.
+These are research records as of 2026-10-17, historical candidate observations. Actual dependency pins are in `go.mod` and
+`go.sum`; the implementation currently builds with Go 1.26.3. CI definitions are
+present, but a workflow file alone is not a passing run.
 
 | Candidate | Observed version or baseline | Consequence for the proposal |
 | --- | --- | --- |
@@ -131,10 +132,9 @@ conflict with discard semantics. Full operational acceptance details belong in
 
 ## License and notices
 
-The repository's current MIT license is provisional. The user has not selected
-the final project license, and it can be changed before publication. Neither Go
-as the proposed language nor a candidate dependency determines the final project
-license. A release must state the chosen project license accurately.
+The source repository uses the MIT license. This is an implementation choice
+within the original plan, rather than a requirement chosen during discovery.
+Dependencies retain their own licenses; see [third-party notices](../THIRD_PARTY_NOTICES.md).
 
 Upstream licenses must be retained independently of that choice. The official MCP
 SDK is undergoing a licensing transition: new code contributions are Apache-2.0,

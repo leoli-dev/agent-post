@@ -1,6 +1,6 @@
 # Proposed protocol
 
-Status: design proposal, not an implemented or frozen API. Confirmed behavior is defined in [requirements](requirements.md). Endpoint names, field names, response codes, and defaults below are proposed.
+Status: protocol design, retained as the rationale for the initial implementation. Confirmed behavior is defined in [requirements](requirements.md). The implemented request contract is generated in [openapi.json](openapi.json) from the CLI/MCP operation registry; concrete shapes and implementation choices are in [runtime](runtime.md). This document alone does not establish that an acceptance case passed.
 
 ## Principles and authorization
 

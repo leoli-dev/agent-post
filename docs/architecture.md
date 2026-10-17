@@ -1,7 +1,8 @@
 # Proposed architecture
 
-This document describes a design, not implemented behavior. Go, the SQLite driver,
-the dependency versions, and the process layout below are proposals. The product
+This document preserves the architecture design. The initial implementation adopts
+Go, SQLite, and the process layout below; differences and constraints are recorded
+in [runtime](runtime.md). This design is not verification evidence. The product
 contract belongs to [requirements](requirements.md) and [protocol](protocol.md).
 The delivery sequence belongs to the [implementation plan](implementation-plan.md),
 and evidence required before claiming support belongs to [acceptance](acceptance.md).

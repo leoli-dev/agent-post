@@ -2,7 +2,7 @@
 
 ## Current status
 
-This repository contains planning documents and no runnable Agent Post application. No application versions or releases are currently supported. Described authentication, source IP checks, retention behavior, and other controls are requirements or design proposals, not implemented protections.
+This repository contains an initial source implementation. No versioned binary release or long-term support policy is published. API key and exact-source-IP checks, administrator sessions/CSRF, current-token claims, and retention controls are implemented and exercised by local tests; this is not a claim of a complete security audit. See [runtime](docs/runtime.md) and [validation](docs/validation.md) for operational boundaries and actual evidence.
 
 ## Private reporting
 
@@ -10,6 +10,6 @@ After the repository is published on GitHub and private vulnerability reporting 
 
 Do not put credentials, confidential messages, private host information, or actionable vulnerability details in public issues or pull requests. A private report should describe the affected document or version, the security boundary involved, the expected and observed behavior, and a minimal reproduction with secrets removed.
 
-Maintainers will use the private advisory process to assess findings and coordinate any correction and disclosure. This planning-stage policy does not establish a response-time commitment or a claim that a security audit has been completed.
+Maintainers will use the private advisory process to assess findings and coordinate any correction and disclosure. This policy does not establish a response-time commitment or a claim that a security audit has been completed.
 
 Ordinary documentation errors without sensitive security details can be reported through the normal issue process described in [CONTRIBUTING.md](CONTRIBUTING.md).

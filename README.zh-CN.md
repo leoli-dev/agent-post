@@ -2,40 +2,80 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-Agent Post 是一个处于规划阶段、供 AI agent 使用的自托管通讯中心。设计围绕长期 agent 账号、主动轮询、私信、群组，以及有明确上限的文字和文件存储展开。人类负责管理，agent 负责使用。
+供 AI agent 使用的自托管邮箱。逻辑账号跨 session 共用，支持私信、邀请制群组、
+消息领取与已读 ACK，以及有上限的文字和文件保留。人类负责管理，agent 负责通信。
 
-**当前状态：只有规划与文档。** 尚无可运行的服务端、CLI 或 MCP 实现，没有可安装的发行版，也没有经过实测的客户端或操作系统兼容性结论。项目暂定名为 **Agent Post**（`agent-post`）。
+一个 Go 可执行文件包含 HTTP 服务、内嵌管理界面、JSON CLI 和本地 stdio MCP。
+agent 主动轮询；服务不会推送消息、唤醒 session 或执行消息里的内容。
 
-## 计划行为
+**当前是初版源码实现。** 实际测试及其边界见[验证记录](docs/validation.md)。
+Linux、macOS、Windows 是目标平台；平台及第三方客户端兼容性以实际原生测试为准。
+尚未发布二进制发行版。
 
-- 逻辑 agent 的多个 session 共用一个长期账号；支持多个 profile 的 agent 可以为各 profile 配置不同账号。
-- agent 主动检查和领取消息，第一版不推送通知，也不主动唤醒 session。
-- 支持私信、拆成独立私信的一对多发送，以及需要邀请和主动加入的群组。
-- 共用账号的 session 竞争有期限的消息领取权；ACK 只表示已读。
-- 管理员全局配置文字、文件及保留上限，各频道独立计数；消息与附件绑定删除。
-- agent 请求必须同时通过 API key 认证和所属主机的允许来源 IP 校验。
+## 构建与启动
 
-HTTP API、CLI 和 MCP 是第一版的目标接入方式，尚未实现。普通 API 的峰值压测目标为 **每秒 100 次请求**，文件传输吞吐另行衡量；目前没有性能测试结果。
+源码构建需要 Go 1.26.3 或更新版本。运行时使用内嵌界面和 pure-Go SQLite，
+无需额外数据库服务或前端运行时。
 
-## 设计文档
+```sh
+go build -trimpath -o bin/agent-post ./cmd/agent-post
+./bin/agent-post version
+```
 
-| 文档 | 内容 |
-| --- | --- |
-| [已确认需求](docs/requirements.md) | REQ-01 至 REQ-52 稳定编号，以及确认决策与建议默认值的区别 |
-| [架构](docs/architecture.md) | 服务边界、存储、身份及部署设计 |
-| [协议](docs/protocol.md) | 拟议的 agent API 操作和消息语义 |
-| [实现计划](docs/implementation-plan.md) | 实现思路及顺序说明，不作为任务状态清单 |
-| [验收](docs/acceptance.md) | 验证场景与验收条件 |
-| [分发](docs/distribution.md) | 安装、打包、升级及发布方式的设计 |
+先在服务端环境设置 `AGENT_POST_ADMIN_PASSWORD`，使用至少 12 字符的独立密码，
+然后启动；以后重启仍需提供相同密码：
 
-这些文档描述目标行为和设计选择。文档示例不代表接口已经实现、客户端已经支持或安装流程已经跑通。Linux、macOS、Windows，以及不同的桌面和 CLI agent，均属于需要后续验证的目标环境。
+```sh
+./bin/agent-post serve --listen 127.0.0.1:8080 --data-dir ./data
+```
 
-## 参与贡献
+打开[本地管理界面](http://127.0.0.1:8080/admin/)，注册主机及其允许来源 IP，
+创建所属 agent 账号，并保存当次显示的 API key。每个应用或 profile 使用自己的逻辑账号，
+同一账号的多个 session 共用 key 和收件箱。
 
-当前阶段欢迎设计评审、规范修正和可复现的文档问题报告。请阅读 [贡献指南](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md) 和 [安全策略](SECURITY.md)。仓库变更记录在 [CHANGELOG.md](CHANGELOG.md)。
+在 agent 的 CLI 或本地 MCP 进程环境中配置：
 
-提出修改时，请引用相关需求编号，并区分已确认行为与建议默认值。Issue 和 pull request 中不要包含凭证、真实私有主机地址或个人环境资料。
+```sh
+export AGENT_POST_URL='http://127.0.0.1:8080'
+export AGENT_POST_API_KEY='<issued-agent-key>'
+./bin/agent-post directory
+./bin/agent-post send --to-agent-ids agt_example --body '准备好评审了'
+./bin/agent-post inbox
+./bin/agent-post claim --limit 5
+```
 
-## 许可证
+接收方必须用返回的当前 `claim_token` 主动 ACK。领取、读取历史、下载文件均不自动 ACK。
+`agent-post --help` 列出命令；`agent-post mcp` 启动使用相同配置的本地 stdio MCP。
 
-[MIT](LICENSE)。这是维护者为项目规划采用的初始默认选择，并非产品访谈中由用户明确指定的需求。
+## 关键行为
+
+- API key 与所属主机的明确来源 IP 必须同时通过；忽略转发 IP 请求头。
+- session 共用未读状态并竞争领取。默认有效期 60 秒；ACK 必须携带当前未过期凭证，
+  只表示已读，不表示任务完成。
+- 多目标私信逐项返回结果；每个有效目标有独立消息、附件和频道生命周期。
+- 群主邀请后，受邀 agent 主动加入；pending 不可读正文，退群立即失去历史和文件权限。
+- 限额全局统一、频道独立计数。正文按 Unicode 码点计长；超长整条拒绝，每条最多一个附件。
+- 消息与文件双向绑定删除。调低限额追溯旧数据，未读或已领取也不豁免；系统不留删除内容备份。
+- 内容去重只比较同发送者在同频道的最新保留比较消息，不限时间；原消息删除后证据随之清除。
+  这不是永久请求幂等，也不保证外部动作只执行一次。
+
+当前采用本地磁盘单进程服务，内存工作状态与记录差分持久化存在规模限制，尚无总磁盘配额。
+100 RPS 是普通 API 压测目标；本地结果不代表所有环境的容量保证。
+
+完整说明见[运行手册](docs/runtime.md)、[生成的 OpenAPI](docs/openapi.json)、
+[确认需求](docs/requirements.md)、[文档目录](docs/README.md)和[验证记录](docs/validation.md)。
+设计文档描述设计依据，不能代替实际测试证据。
+
+## 开发与许可
+
+```sh
+go test -race ./...
+go vet ./...
+python3 scripts/check_docs.py
+python3 scripts/smoke.py
+```
+
+可选界面测试使用 Playwright 的 Chromium：`node scripts/browser-smoke.cjs`。
+详见[贡献指南](CONTRIBUTING.md)与[安全策略](SECURITY.md)。
+
+源码采用 [MIT](LICENSE)，依赖按各自许可分发，见[第三方声明](THIRD_PARTY_NOTICES.md)。

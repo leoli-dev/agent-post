@@ -1,6 +1,6 @@
 # Contributing to Agent Post
 
-Agent Post currently contains planning documents and repository metadata. There is no runnable application, release, CLI, MCP server, or application test suite. Useful contributions at this stage include reviewing the design, correcting inconsistencies, improving examples, and making the documents easier to use.
+Agent Post contains an initial Go service, CLI, local MCP adapter, embedded admin UI, and tests. See [runtime](docs/runtime.md) for the implemented contract and [validation](docs/validation.md) for actual verification. Useful contributions include correctness fixes, reproducible tests, design review, and clearer examples.
 
 ## Propose a change
 
@@ -14,7 +14,7 @@ Use an issue to describe a problem or discuss an alternative. A focused pull req
 
 Explain what changes for a reader or future implementer, why the change is needed, which requirement IDs it affects, and how you checked it. State any assumptions or unresolved decisions.
 
-For documentation changes, verify relative links, examples, terminology, and consistency with the confirmed requirements. Report the checks actually performed. There are no application build or test commands to run at this stage; do not invent results or installation instructions.
+Run `go test -race ./...`, `go vet ./...`, `python3 scripts/check_docs.py`, and `python3 scripts/smoke.py` for relevant application changes. The smoke script builds and runs an isolated real service using temporary synthetic fixtures. Optional `python3 scripts/smoke.py --benchmark-seconds 60 --file-benchmark-rounds 10` characterizes local load; report its exact workload and scope. Use Chromium for optional `node scripts/browser-smoke.cjs` UI checks (requires Playwright). Verify document links, examples, terminology, and consistency with confirmed requirements. Regenerate the shared request contract with `go run ./cmd/contract > docs/openapi.json`. Regenerate third-party notices when dependencies change. Report checks actually performed; a workflow definition is not evidence of a passing run.
 
 The public [implementation plan](docs/implementation-plan.md) explains the design and implementation sequence. Do not turn it, the README, or another document into a duplicate progress checklist. Maintainer task status is recorded separately in the maintainer development log.
 

@@ -1,6 +1,6 @@
 # Acceptance specification
 
-This document specifies future tests for agent-post. It is not a test report: no application, cross-host integration, or benchmark result is established by these scenarios. The authorized project stage is planning and documentation.
+This document specifies acceptance scenarios for agent-post. It is not a test report. The application now has executable tests; [validation](validation.md) records the actual checks and their scope. Scenarios here do not establish a passing result, cross-host integration, or platform support.
 
 Requirement references below point to [confirmed requirements](requirements.md). Acceptance case IDs identify scenarios, not additional user requirements. A **proposed** behavior, fixture, method, or target is a planning recommendation and has not been confirmed by the user. Where a proposed behavior is not selected, update its scenarios before implementation.
 
@@ -154,7 +154,7 @@ REQ-49 sets a **100 requests/second peak load-test target for ordinary API opera
 
 Any optional defensive rate limits are separate proposed settings. If introduced, record them and configure them so they do not invalidate the intended benchmark. A rate-limit response is not evidence that the system achieved the throughput target.
 
-All hardware and load results are currently pending:
+The full release acceptance workload below remains a specification. Local characterization, where executed, is recorded separately in [validation](validation.md):
 
 | Record | Value before execution |
 | --- | --- |
