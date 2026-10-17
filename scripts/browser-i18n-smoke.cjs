@@ -10,6 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const locales = ['en', 'fr', 'zh-Hans', 'zh-Hant', 'it', 'es', 'ru'];
+const administrationLabels = { en: 'Administration', fr: 'Administration', 'zh-Hans': '管理', 'zh-Hant': '管理', it: 'Amministrazione', es: 'Administración', ru: 'Администрирование' };
 const loginLabels = { en: 'Sign in', fr: 'Se connecter', 'zh-Hans': '登录', 'zh-Hant': '登入', it: 'Accedi', es: 'Iniciar sesión', ru: 'Войти' };
 
 async function main() {
@@ -64,6 +65,7 @@ async function main() {
     for (const locale of locales) {
       await pick(locale);
       titleByLocale[locale] = await page.title();
+      assert.equal(titleByLocale[locale], `Agent Post · ${administrationLabels[locale]}`);
       loginByLocale[locale] = await page.locator('#login-form button[type=submit]').textContent();
       assert.equal(loginByLocale[locale].trim(), loginLabels[locale], `${locale}: localized login label`);
       assert.equal(await page.locator('[data-i18n-language]:visible option').count(), 7);
@@ -136,7 +138,6 @@ async function main() {
     }
     for (const locale of locales.filter(value => value !== 'en')) {
       assert.notEqual(loginByLocale[locale], loginByLocale.en, `${locale}: translated login button`);
-      assert.notEqual(titleByLocale[locale], titleByLocale.en, `${locale}: translated document title`);
       assert.notEqual(hostLabelByLocale[locale], hostLabelByLocale.en, `${locale}: translated forms`);
       assert.notEqual(errorByLocale[locale], errorByLocale.en, `${locale}: translated authentication errors`);
     }
