@@ -175,7 +175,10 @@ const catalogs = {
     "validation.number": "Enter a valid whole number.",
     "validation.minimum": "The minimum value is {minimum}.",
     "validation.maximum": "The maximum value is {maximum}.",
-    "validation.generic": "Check this field’s value."
+    "validation.generic": "Check this field’s value.",
+    "Copy key": "Copy key",
+    "Copied": "Copied",
+    "Copy failed. Select the key and copy it manually.": "Copy failed. Select the key and copy it manually."
   },
   "fr": {
     "Administration": "Administration",
@@ -350,7 +353,10 @@ const catalogs = {
     "validation.number": "Saisissez un nombre entier valide.",
     "validation.minimum": "La valeur minimale est {minimum}.",
     "validation.maximum": "La valeur maximale est {maximum}.",
-    "validation.generic": "Vérifiez la valeur de ce champ."
+    "validation.generic": "Vérifiez la valeur de ce champ.",
+    "Copy key": "Copier la clé",
+    "Copied": "Copiée",
+    "Copy failed. Select the key and copy it manually.": "La copie a échoué. Sélectionnez la clé et copiez-la manuellement."
   },
   "zh-Hans": {
     "Administration": "管理",
@@ -525,7 +531,10 @@ const catalogs = {
     "validation.number": "请输入有效的整数。",
     "validation.minimum": "最小值为 {minimum}。",
     "validation.maximum": "最大值为 {maximum}。",
-    "validation.generic": "请检查此字段的值。"
+    "validation.generic": "请检查此字段的值。",
+    "Copy key": "复制密钥",
+    "Copied": "已复制",
+    "Copy failed. Select the key and copy it manually.": "复制失败。请选中密钥后手动复制。"
   },
   "zh-Hant": {
     "Administration": "管理",
@@ -700,7 +709,10 @@ const catalogs = {
     "validation.number": "請輸入有效的整數。",
     "validation.minimum": "最小值為 {minimum}。",
     "validation.maximum": "最大值為 {maximum}。",
-    "validation.generic": "請檢查此欄位的值。"
+    "validation.generic": "請檢查此欄位的值。",
+    "Copy key": "複製金鑰",
+    "Copied": "已複製",
+    "Copy failed. Select the key and copy it manually.": "複製失敗。請選取金鑰後手動複製。"
   },
   "it": {
     "Administration": "Amministrazione",
@@ -875,7 +887,10 @@ const catalogs = {
     "validation.number": "Inserisci un numero intero valido.",
     "validation.minimum": "Il valore minimo è {minimum}.",
     "validation.maximum": "Il valore massimo è {maximum}.",
-    "validation.generic": "Controlla il valore del campo."
+    "validation.generic": "Controlla il valore del campo.",
+    "Copy key": "Copia chiave",
+    "Copied": "Copiata",
+    "Copy failed. Select the key and copy it manually.": "Copia non riuscita. Seleziona la chiave e copiala manualmente."
   },
   "es": {
     "Administration": "Administración",
@@ -1050,7 +1065,10 @@ const catalogs = {
     "validation.number": "Introduce un número entero válido.",
     "validation.minimum": "El valor mínimo es {minimum}.",
     "validation.maximum": "El valor máximo es {maximum}.",
-    "validation.generic": "Revisa el valor de este campo."
+    "validation.generic": "Revisa el valor de este campo.",
+    "Copy key": "Copiar clave",
+    "Copied": "Copiada",
+    "Copy failed. Select the key and copy it manually.": "No se pudo copiar. Selecciona la clave y cópiala manualmente."
   },
   "ru": {
     "Administration": "Администрирование",
@@ -1225,7 +1243,10 @@ const catalogs = {
     "validation.number": "Введите корректное целое число.",
     "validation.minimum": "Минимальное значение: {minimum}.",
     "validation.maximum": "Максимальное значение: {maximum}.",
-    "validation.generic": "Проверьте значение этого поля."
+    "validation.generic": "Проверьте значение этого поля.",
+    "Copy key": "Скопировать ключ",
+    "Copied": "Скопировано",
+    "Copy failed. Select the key and copy it manually.": "Не удалось скопировать. Выделите ключ и скопируйте его вручную."
   }
 };
 const supportedLocales = Object.freeze([

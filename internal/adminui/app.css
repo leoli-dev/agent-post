@@ -6,3 +6,5 @@
 /* Dense metadata tables scroll within their panel instead of squeezing names
    and opaque IDs into narrow columns on localized mobile screens. */
 .table-panel{max-width:100%;overscroll-behavior-x:contain}.table-panel table{min-width:760px}.table-panel td:first-child{min-width:210px}.table-panel td:last-child{min-width:220px}.table-panel td small{max-width:260px}
+/* Dialog language control sits in the footer so focus starts on the task. */
+.dialog-actions{align-items:center}.dialog-actions .dialog-language{margin:0 auto 0 0;justify-content:flex-start}.key-field{display:flex;gap:10px;align-items:flex-start}.key-field textarea{flex:1;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:13px}.key-field button{flex-shrink:0}#issued-agent{overflow-wrap:anywhere}@media(max-width:420px){.key-field{flex-direction:column;align-items:stretch}}

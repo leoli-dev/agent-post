@@ -117,10 +117,16 @@ function keyResult(key, agent) {
   setMessage($("#issued-agent"), agent ? "Agent ID: {id}" : "The previous key is no longer valid.", agent ? {id: agent.id} : {});
   $("#key-dialog").showModal();
 }
+// The admin state endpoint has no defined order; sort so rows keep their
+// positions across refreshes.
+function byName(items) {
+  const collator = new Intl.Collator(i18n.getLocale(), {numeric: true, sensitivity: "base"});
+  return [...(items || [])].sort((a, b) => collator.compare(a.name || "", b.name || "") || String(a.id).localeCompare(String(b.id)));
+}
 function render() {
-  const hosts = state.hosts || [];
-  const agents = state.agents || [];
-  const groups = state.groups || [];
+  const hosts = byName(state.hosts);
+  const agents = byName(state.agents);
+  const groups = byName(state.groups);
   const hostName = id => hosts.find(h => h.id === id)?.name || id;
   const agentName = id => agents.find(a => a.id === id)?.name || id;
   setNumber($("#host-count"), hosts.length);
@@ -181,7 +187,7 @@ function editAgent(agent) {
   const form = $("#agent-form"); form.reset();
   form.elements.id.value = agent?.id || "";
   form.elements.name.value = agent?.name || "";
-  $("#agent-host").replaceChildren(...state.hosts.map(host => { const option = el("option", host.name); option.value = host.id; return option; }));
+  $("#agent-host").replaceChildren(...byName(state.hosts).map(host => { const option = el("option", host.name); option.value = host.id; return option; }));
   if (agent) form.elements.host_id.value = agent.host_id;
   setMessage($("#agent-title"), agent ? "Edit agent" : "Create agent");
   clearMessage(form.querySelector(".form-error"));
@@ -237,7 +243,12 @@ $("#confirm-form").addEventListener("submit", event => {
   if (action) action().catch(error => notice(error, true));
 });
 document.querySelectorAll(".close-dialog").forEach(node => node.addEventListener("click", () => node.closest("dialog").close()));
-$("#key-dialog").addEventListener("close", () => { $("#issued-key").value = ""; clearMessage($("#issued-agent")); });
+$("#key-dialog").addEventListener("close", () => { $("#issued-key").value = ""; clearMessage($("#issued-agent")); setMessage($("#copy-key"), "Copy key"); });
+$("#copy-key").addEventListener("click", async () => {
+  const field = $("#issued-key");
+  try { await navigator.clipboard.writeText(field.value); setMessage($("#copy-key"), "Copied"); }
+  catch { field.focus(); field.select(); notice("Copy failed. Select the key and copy it manually.", true); }
+});
 $("#confirm-dialog").addEventListener("close", () => { confirmAction = undefined; });
 $("#new-host").addEventListener("click", () => editHost());
 $("#new-agent").addEventListener("click", () => editAgent());

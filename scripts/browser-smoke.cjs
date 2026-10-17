@@ -34,7 +34,8 @@ async function main() {
     }
     assert.ok(ready, 'service starts');
     browser = await chromium.launch({ headless: true, ...(process.env.AGENT_POST_CHROMIUM ? { executablePath: process.env.AGENT_POST_CHROMIUM } : {}) });
-    const page = await browser.newPage({ locale: 'en-US', viewport: { width: 1440, height: 1000 } });
+    const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1000 }, permissions: ['clipboard-read', 'clipboard-write'] });
+    const page = await context.newPage();
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(`${base}/admin/`);
     await page.getByLabel('Administrator password').fill(password);
@@ -42,11 +43,23 @@ async function main() {
     await page.getByRole('heading', { name: 'Ready when your agents are.' }).waitFor();
     await page.getByRole('link', { name: 'Hosts', exact: true }).click();
     await page.getByRole('button', { name: 'Register host', exact: true }).click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'host-name', 'host dialog focuses its first field');
     await page.getByLabel('Host name', { exact: true }).fill('fixture-host');
     await page.getByLabel('Operating system', { exact: true }).fill('Test OS');
     await page.getByLabel('Allowed IP addresses', { exact: true }).fill('127.0.0.1\n::1');
     await page.getByRole('button', { name: 'Save host', exact: true }).click();
     await page.getByRole('cell', { name: 'fixture-host', exact: false }).waitFor();
+    for (const name of ['zeta-host', 'Alpha-host', 'host-10', 'host-9']) {
+      const created = await fetch(`${base}/admin/api/hosts`, { method: 'POST', headers: { Authorization: `Bearer ${password}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name, os: '', ips: ['192.0.2.1'], metadata: {} }) });
+      assert.equal(created.status, 200);
+    }
+    const hostOrder = () => page.locator('#host-rows tr').evaluateAll(rows => rows.map(row => row.cells[0].firstChild.textContent));
+    const expectedOrder = ['Alpha-host', 'fixture-host', 'host-9', 'host-10', 'zeta-host'];
+    for (let i = 0; i < 3; i++) {
+      await page.locator('#refresh').click();
+      await page.waitForFunction(() => document.querySelectorAll('#host-rows tr').length === 5);
+      assert.deepEqual(await hostOrder(), expectedOrder, 'rows keep a stable, natural name order across refreshes');
+    }
     await page.getByRole('link', { name: 'Agents', exact: true }).click();
     await page.getByRole('button', { name: 'Create agent', exact: true }).click();
     await page.getByLabel('Agent name', { exact: true }).fill('fixture-agent');
@@ -54,9 +67,14 @@ async function main() {
     await page.getByRole('heading', { name: 'Agent API key', exact: true }).waitFor();
     const oldKey = await page.getByLabel('New API key', { exact: true }).inputValue();
     assert.ok(oldKey.startsWith('apk_'));
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'copy-key', 'key dialog focuses the copy action');
+    await page.locator('#copy-key').click();
+    await page.getByRole('button', { name: 'Copied', exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), oldKey, 'copy places the issued key on the clipboard');
     await page.getByRole('button', { name: 'I saved the key', exact: true }).click();
     await page.getByRole('cell', { name: 'fixture-agent', exact: false }).waitFor();
     await page.getByRole('button', { name: 'Rotate key', exact: true }).click();
+    assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Cancel', 'confirmation dialogs focus the safe choice');
     await page.locator('#confirm-action').click();
     await page.getByRole('heading', { name: 'Agent API key', exact: true }).waitFor();
     assert.notEqual(await page.getByLabel('New API key', { exact: true }).inputValue(), oldKey);
@@ -91,7 +109,7 @@ async function main() {
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await page.getByLabel('Administrator password').waitFor();
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ browser: await browser.version(), viewport: [1440, 390], passed: ['login', 'hosts', 'agents', 'key rotation and old-key rejection', 'disable and enable', 'settings', 'session reload', 'mobile containment', 'logout'], pageErrors: errors }));
+    console.log(JSON.stringify({ browser: await browser.version(), viewport: [1440, 390], passed: ['login', 'hosts', 'stable row order', 'dialog initial focus', 'agents', 'key copy', 'key rotation and old-key rejection', 'disable and enable', 'settings', 'session reload', 'mobile containment', 'logout'], pageErrors: errors }));
   } finally {
     if (browser) await browser.close();
     if (server.pid && server.exitCode === null) server.kill('SIGTERM');
