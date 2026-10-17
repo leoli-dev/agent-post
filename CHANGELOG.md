@@ -18,6 +18,10 @@ This file records repository changes. Entries describe source changes; a publish
 
 - Seven-language administration UI with browser detection, saved preference, localized static/dynamic text and validation, and live switching that preserves form/dialog state (REQ-53).
 
+### Changed
+
+- Administration console redesign: token-based light/dark styling with system fonts, sidebar/icon-rail/bottom-tab layouts, status-oriented overview, filterable and sortable lists with stable name order, row action menus, phone cards and bottom sheets, ID and key copy actions, grouped limits with unit equivalents and a change-diff confirmation, and dialog focus on the first task control.
+
 ### Verification
 
 See [validation](docs/validation.md) for executed checks and limits. This source publication does not create a binary release or certify every target platform or agent application.

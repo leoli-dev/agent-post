@@ -177,3 +177,31 @@ Node tests, the English smoke and the complete seven-locale browser suite.
 Linux, macOS, and Windows native build/vet/race steps, the generated contract,
 and the real-service smoke also passed. [Documentation CI](https://github.com/leoli-dev/agent-post/actions/runs/39073953840)
 passed for the same revision.
+
+## Administration console redesign
+
+The console was redesigned in four commits (`8881ca3`, `5697c4f`, `6f6e1fe`,
+`1995680`) without backend or protocol changes. Local checks on the final source
+used Playwright 1.62.1 with its bundled Chromium 151.0.7922.34; no new throughput
+measurement was performed.
+
+- `go test -race ./...`, `go vet ./...`, `node --check` for the console and test
+  scripts, the documentation check through REQ-53, the real-service HTTP/CLI/MCP
+  smoke, and `git diff --check` passed. The four Node i18n tests passed with
+  200-key catalogs in all seven locales.
+- The English Chromium smoke passed with zero page errors. Beyond the earlier
+  flows it now covers stable natural name order across refreshes, name sorting
+  and `aria-sort`, text, IP and status filters, dialog initial focus, issued-key
+  and clipboard copy, keyboard row menus (Enter, arrows, Escape returning
+  focus), destructive styling and target names in confirmations, the limits
+  change list, Discard, non-destructive versus lowered-retention confirmations,
+  the overview attention list, phone cards without horizontal scrolling,
+  bottom-sheet row actions, and sign-out through the phone menu.
+- The seven-locale Chromium suite passed unchanged, including language switching
+  inside dialogs from the relocated footer picker.
+- Screenshots were inspected at 1440, 1180, 820, 390, and 360 pixels wide in
+  English, Russian, French, and Traditional Chinese, in light and dark schemes,
+  with no page-level horizontal overflow. Computed contrast for every text and
+  status token on its backgrounds is at least 4.74:1 (light) and 5.71:1 (dark).
+- New and changed strings were translated with agent assistance; there was no
+  native-speaker review for this change.

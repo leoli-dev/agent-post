@@ -85,11 +85,24 @@ initial schema has no upgrade history to advertise. To uninstall, stop the
 service, remove its executable and client configuration, and explicitly remove
 the chosen data directory if all retained content should be discarded.
 
+## Administration console layout
+
+The console follows the operating system's light or dark preference. Desktop
+browsers show a sidebar; tablets show an icon rail; phones show a bottom tab bar,
+list rows as cards, and row actions and dialogs as bottom sheets. Host, agent, and
+group lists sort by name and can be filtered and re-sorted in the browser; this
+is presentation only and does not change API ordering. The overview lists disabled
+hosts and agents, agents whose host is disabled, and agents that have never
+accessed the service. Before saving limits, the confirmation lists every changed
+value and marks the change destructive only when a retention limit (messages or
+files per channel, body length, or file size) is lowered.
+
 ## Administration languages
 
 The management console supports **English, Français, 简体中文, 繁體中文,
 Italiano, Español, and Русский**. Choose a language on the login page, in the
-console header, or inside an open dialog. The choice takes effect immediately,
+sidebar (the More menu on tablets and phones), or in the footer of an open
+dialog. The choice takes effect immediately,
 including navigation, forms, settings descriptions, confirmation warnings,
 validation errors, cleanup state, and status messages.
 
