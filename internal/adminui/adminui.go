@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-//go:embed index.html app.css app.js i18n.js
+//go:embed index.html app.css app.js i18n.js favicon.svg
 var assets embed.FS
 
 // Handler returns the embedded console. All data operations use authenticated

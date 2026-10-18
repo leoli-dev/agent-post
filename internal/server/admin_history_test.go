@@ -35,7 +35,7 @@ func TestAdminHistoryAuthorizationAndReadOnly(t *testing.T) {
 	if status, _ := f.call("GET", "/api/v1/channels/"+group+"/messages", f.keys["carol"], nil); status != 403 {
 		t.Fatalf("departed member history: %d", status)
 	}
-	paths := []string{"/admin/api/channels", "/admin/api/channels/" + channel + "/messages", "/admin/api/channels/" + group + "/messages"}
+	paths := []string{"/admin/api/channels", "/admin/api/channels?q=read&participant_id=" + f.ids["bob"], "/admin/api/channels/" + channel + "/messages", "/admin/api/channels/" + channel + "/messages?q=read", "/admin/api/channels/" + group + "/messages"}
 	for _, path := range paths {
 		for _, key := range []string{"", f.keys["alice"], "incorrect-admin-password"} {
 			if status, out := f.call("GET", path, key, nil); status != 401 || len(out) != 1 || out["error"] == nil {
@@ -83,7 +83,7 @@ func TestAdminHistoryAuthorizationAndReadOnly(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatal("administrator history changed retained state, delivery claims, or read state")
 	}
-	history := f.must("GET", paths[1], testPassword, nil)["messages"].([]any)
+	history := f.must("GET", "/admin/api/channels/"+channel+"/messages", testPassword, nil)["messages"].([]any)
 	if len(history) != 4 || history[3].(map[string]any)["attachment"].(map[string]any)["filename"] != "example.bin" {
 		t.Fatalf("attachment metadata missing: %v", history)
 	}
@@ -104,7 +104,6 @@ func TestAdminChannelListPaginationAndSearch(t *testing.T) {
 	f.upload([]byte("attachment"), []string{f.ids["bob"]})
 	review := f.must("POST", "/api/v1/groups", f.keys["alice"], map[string]any{"name": "Review room", "invitee_ids": []string{f.ids["bob"]}})["channel_id"].(string)
 	quiet := f.must("POST", "/api/v1/groups", f.keys["alice"], map[string]any{"name": "Quiet room", "invitee_ids": []string{f.ids["carol"]}})["channel_id"].(string)
-	f.must("PATCH", "/admin/api/agents/"+f.ids["bob"], testPassword, map[string]any{"enabled": false})
 	var ids []string
 	byID := map[string]map[string]any{}
 	next := ""
@@ -137,18 +136,45 @@ func TestAdminChannelListPaginationAndSearch(t *testing.T) {
 			t.Fatalf("empty group summary: %v", got)
 		}
 	}
+	for _, id := range []string{review, quiet} {
+		f.must("POST", "/api/v1/groups/"+id+"/messages", f.keys["alice"], map[string]any{"body": "Release marker • 计划"})
+	}
+	f.must("POST", "/api/v1/groups/"+review+"/join", f.keys["bob"], nil)
+	f.must("POST", "/api/v1/groups/"+quiet+"/join", f.keys["carol"], nil)
+	f.must("POST", "/api/v1/groups/"+quiet+"/leave", f.keys["carol"], nil)
+	bobRoom := f.must("POST", "/api/v1/groups", f.keys["bob"], map[string]any{"name": "Other room", "invitee_ids": []string{f.ids["carol"]}})["channel_id"].(string)
+	f.must("POST", "/api/v1/groups/"+bobRoom+"/messages", f.keys["bob"], map[string]any{"body": "Release marker"})
+	f.must("PATCH", "/admin/api/agents/"+f.ids["bob"], testPassword, map[string]any{"enabled": false})
 	for _, test := range []struct {
 		query string
 		want  []string
 	}{
 		{"kind=private", []string{bobChannel, f.s.st.Messages[1].ChannelID}},
-		{"kind=group", []string{review, quiet}},
-		{"q=rEvIeW", []string{review}},
-		{"q=" + strings.ToUpper(review), []string{review}},
-		{"q=" + strings.ToUpper(bobChannel), []string{bobChannel}},
-		{"q=BOB", []string{bobChannel, review}},
-		{"q=" + strings.ToUpper(f.ids["bob"]), []string{bobChannel, review}},
-		{"kind=group&q=BOB", []string{review}},
+		{"kind=group", []string{review, quiet, bobRoom}},
+		{"q=rElEaSe", []string{review, quiet, bobRoom}},
+		{"q=%20rElEaSe%20", []string{review, quiet, bobRoom}},
+		{"q=first", []string{bobChannel, f.s.st.Messages[1].ChannelID}},
+		{"q=binary", []string{bobChannel}},
+		{"q=" + url.QueryEscape("计划"), []string{review, quiet}},
+		{"q=rEvIeW", []string{}},
+		{"q=" + strings.ToUpper(review), []string{}},
+		{"q=" + strings.ToUpper(bobChannel), []string{}},
+		{"q=BOB", []string{}},
+		{"q=" + strings.ToUpper(f.ids["bob"]), []string{}},
+		{"q=example.bin", []string{}},
+		{"kind=private&participant_id=" + f.ids["bob"], []string{bobChannel}},
+		{"kind=group&participant_id=" + f.ids["bob"], []string{review, bobRoom}},
+		{"participant_id=" + f.ids["carol"], []string{f.s.st.Messages[1].ChannelID}},
+		{"participant_id=missing-agent", []string{}},
+		{"owner_id=" + f.ids["alice"], []string{review, quiet}},
+		{"owner_id=" + f.ids["bob"], []string{bobRoom}},
+		{"owner_id=missing-agent", []string{}},
+		{"kind=private&owner_id=" + f.ids["alice"], []string{}},
+		{"kind=group&owner_id=" + f.ids["alice"] + "&participant_id=" + f.ids["bob"] + "&q=release", []string{review}},
+		{"kind=group&owner_id=" + f.ids["alice"] + "&participant_id=" + f.ids["bob"] + "&q=first", []string{}},
+		{"kind=private&participant_id=" + f.ids["bob"] + "&q=FIRST", []string{bobChannel}},
+		{"kind=private&participant_id=" + f.ids["bob"] + "&q=release", []string{}},
+		{"kind=group&owner_id=" + f.ids["bob"] + "&participant_id=" + f.ids["carol"], []string{}},
 		{"q=missing-channel", []string{}},
 	} {
 		out := f.must("GET", "/admin/api/channels?"+test.query, testPassword, nil)
@@ -161,8 +187,8 @@ func TestAdminChannelListPaginationAndSearch(t *testing.T) {
 			t.Fatalf("query %s: %v, want %v", test.query, out, test.want)
 		}
 	}
-	first := f.must("GET", "/admin/api/channels?kind=group&q=ROOM&limit=1", testPassword, nil)
-	second := f.must("GET", "/admin/api/channels?kind=group&q=ROOM&limit=1&cursor="+first["next_cursor"].(string), testPassword, nil)
+	first := f.must("GET", "/admin/api/channels?kind=group&q=RELEASE&owner_id="+f.ids["alice"]+"&limit=1", testPassword, nil)
+	second := f.must("GET", "/admin/api/channels?kind=group&q=RELEASE&owner_id="+f.ids["alice"]+"&limit=1&cursor="+first["next_cursor"].(string), testPassword, nil)
 	if first["next_cursor"] == "" || len(second["channels"].([]any)) != 1 || second["next_cursor"] != "" || first["channels"].([]any)[0].(map[string]any)["id"] == second["channels"].([]any)[0].(map[string]any)["id"] {
 		t.Fatalf("filtered pagination: %v %v", first, second)
 	}
@@ -214,6 +240,40 @@ func TestAdminHistoryPaginationAndRetention(t *testing.T) {
 			t.Fatalf("%s history: %v", order, bodies)
 		}
 	}
+	for _, order := range []string{"oldest", "newest"} {
+		bodies := []string{}
+		next := ""
+		for {
+			out := f.must("GET", path+"?q=%20E%20&limit=1&order="+order+"&cursor="+next, testPassword, nil)
+			messages := out["messages"].([]any)
+			if len(messages) != 1 {
+				t.Fatalf("filtered history page: %v", out)
+			}
+			bodies = append(bodies, messages[0].(map[string]any)["body"].(string))
+			next = out["next_cursor"].(string)
+			if next == "" {
+				break
+			}
+		}
+		want := []string{"middle", "new"}
+		if order == "newest" {
+			want = []string{"new", "middle"}
+		}
+		if !reflect.DeepEqual(bodies, want) {
+			t.Fatalf("%s filtered history: %v", order, bodies)
+		}
+	}
+	for _, query := range []string{"alice", f.ids["alice"], channel, "example.bin", "other channel", "missing"} {
+		out := f.must("GET", path+"?q="+url.QueryEscape(query)+"&limit=1", testPassword, nil)
+		if len(out["messages"].([]any)) != 0 || out["next_cursor"] != "" {
+			t.Fatalf("non-body history match for %s: %v", query, out)
+		}
+	}
+	// Content search is an administrator feature; ordinary agent history retains
+	// its existing behavior when an unrecognized q parameter is supplied.
+	if messages := f.must("GET", "/api/v1/channels/"+channel+"/messages?q=missing", f.keys["alice"], nil)["messages"].([]any); len(messages) != 4 {
+		t.Fatalf("administrator search changed agent history: %v", messages)
+	}
 	for _, test := range []struct{ query, code string }{{"limit=101", "invalid_limit"}, {"order=unknown", "invalid_order"}, {"cursor=" + cursor("not-a-sequence"), "invalid_cursor"}, {"cursor=" + url.QueryEscape("%"), "invalid_cursor"}} {
 		status, out := f.call("GET", path+"?"+test.query, testPassword, nil)
 		if status != 400 || out["error"].(map[string]any)["code"] != test.code {
@@ -224,6 +284,7 @@ func TestAdminHistoryPaginationAndRetention(t *testing.T) {
 		t.Fatalf("missing channel: %d", status)
 	}
 	first := f.must("GET", path+"?limit=1", testPassword, nil)
+	filteredFirst := f.must("GET", path+"?q=E&limit=1", testPassword, nil)
 	settings := f.s.st.Settings
 	settings.MessageCount = 2
 	f.must("PUT", "/admin/api/settings", testPassword, settings)
@@ -231,18 +292,28 @@ func TestAdminHistoryPaginationAndRetention(t *testing.T) {
 	if messages := page["messages"].([]any); len(messages) != 2 || messages[0].(map[string]any)["body"] != "new" || messages[1].(map[string]any)["body"] != "binary" {
 		t.Fatalf("cursor after retention: %v", page)
 	}
+	filteredPage := f.must("GET", path+"?q=E&cursor="+filteredFirst["next_cursor"].(string), testPassword, nil)
+	if messages := filteredPage["messages"].([]any); len(messages) != 1 || messages[0].(map[string]any)["body"] != "new" || filteredPage["next_cursor"] != "" {
+		t.Fatalf("filtered cursor after retention: %v", filteredPage)
+	}
+	if channels := f.must("GET", "/admin/api/channels?q=middle", testPassword, nil)["channels"].([]any); len(channels) != 0 {
+		t.Fatalf("evicted body still matches channel search: %v", channels)
+	}
 	settings.FileCount = 0
 	f.must("PUT", "/admin/api/settings", testPassword, settings)
 	retained := f.must("GET", path, testPassword, nil)["messages"].([]any)
 	if len(retained) != 1 || retained[0].(map[string]any)["body"] != "new" {
 		t.Fatalf("coupled file/message deletion: %v", retained)
 	}
+	if channels := f.must("GET", "/admin/api/channels?q=binary", testPassword, nil)["channels"].([]any); len(channels) != 0 {
+		t.Fatalf("deleted attachment message still matches channel search: %v", channels)
+	}
 	settings.BodyCodepoints = 1
 	f.must("PUT", "/admin/api/settings", testPassword, settings)
 	if messages := f.must("GET", path, testPassword, nil)["messages"].([]any); len(messages) != 0 {
 		t.Fatalf("deleted messages remain visible: %v", messages)
 	}
-	summary := f.must("GET", "/admin/api/channels?q="+channel, testPassword, nil)["channels"].([]any)[0].(map[string]any)
+	summary := f.must("GET", "/admin/api/channels?kind=private&participant_id="+f.ids["bob"], testPassword, nil)["channels"].([]any)[0].(map[string]any)
 	if summary["message_count"] != float64(0) || summary["file_count"] != float64(0) || summary["last_message_at"] != nil {
 		t.Fatalf("retained counts after deletion: %v", summary)
 	}

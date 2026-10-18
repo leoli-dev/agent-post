@@ -298,3 +298,43 @@ changes. No new throughput benchmark was run.
 These checks verify local instructions and transports. They do not certify
 skill discovery or end-to-end use in a named third-party agent application,
 establish a new platform support claim, or measure throughput.
+
+## Administration usability and resource overview follow-up
+
+Local checks on **2026-10-18** exercised REQ-56 through REQ-61 with synthetic
+accounts and temporary service data on macOS arm64.
+
+- `go test -race -count=1 ./...` passed; the server package took 173.636 seconds.
+  Subsequent focused metric race tests also passed after isolating shared probe
+  cancellation from individual HTTP clients. `go vet ./...`, Go formatting,
+  JavaScript syntax checks, documentation checks through REQ-61, and
+  `git diff --check` passed. All four Node i18n tests passed with complete
+  catalogs and matching interpolation parameters across seven locales.
+- Focused channel tests cover body-only search, combined exact participant/owner
+  filters, active versus pending/left members, filtering before pagination,
+  retention gaps, and unchanged claims/read state. Names, IDs, and attachment
+  filenames do not match message-body search. Ordinary agent history retains
+  its existing behavior.
+- The English, seven-language, and channel-history browser suites passed in
+  **Chromium 155.0.8051.0**, with zero page errors. They cover the embedded
+  favicon, private/group tabs and icons, content search in channel and message
+  lists, filter combinations, paging, group shortcuts, literal rendering of
+  untrusted content, session reload, and mobile containment. The agent form has
+  no language selector. Clipboard checks read the actual system clipboard and
+  compare it to the issued key, including missing and denied Clipboard API
+  fallbacks. A delayed rejection after the key dialog closes preserves the
+  clipboard and does not falsely report success.
+- Metric tests cover administrator cookie/Bearer authentication, agent-key
+  rejection, command deadlines/output limits, cache sharing, canceled callers,
+  native-output parsers, and sampling outside the messaging state mutex.
+  A native macOS smoke returned CPU, GPU, memory, and disk counters from
+  `top`, `ioreg`, `sysctl`/`vm_stat`, and `df`; repeated immediate reads reused
+  the sample timestamp. Linux and Windows parser tests use fixtures; their new
+  collectors were **not executed natively** in this follow-up. GPU counters
+  depend on the system/driver, and the Windows implementation reports GPU
+  utilization unavailable. Disk reports occupied filesystem capacity, and
+  macOS memory includes cached/inactive pages.
+
+No new dependencies, published release, hosted CI result, or throughput benchmark
+is reported for these changes. New translation strings have not had native-speaker
+review.

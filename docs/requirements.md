@@ -95,6 +95,17 @@ The selected direction is a new, agent-first communication service. Earlier rese
 
 - **REQ-55 — Human-readable file-size settings.** The administration settings UI displays and accepts file-size limits in MB rather than raw byte counts. The default maximum size of one file is 50 MB. The runtime contract defines the unit conversion; API and stored settings can continue to use bytes.
 
+## Administration usability and resource overview
+
+The administration follow-up adds these confirmed requirements:
+
+- **REQ-56 — Console favicon.** Provide a recognizable favicon for the administration console.
+- **REQ-57 — Copy issued credentials.** The copy button in the newly issued API key dialog copies the key value to the system clipboard, with accurate success or failure feedback.
+- **REQ-58 — Separate channel tabs.** Present private conversations and group conversations in distinct tabs with icons and readable channel summaries.
+- **REQ-59 — Content search and identity filters.** Private conversations have an optional participant-list filter. Group conversations have owner and participant-list filters. Text search searches retained conversation content rather than participant names; identity selection belongs in the separate filters.
+- **REQ-60 — Simplify agent creation.** The create-agent popup does not include a language selector; it uses the administration UI language.
+- **REQ-61 — Server resource overview.** Show CPU, GPU, disk, and memory utilization on the overview, preferring operating-system interfaces without additional libraries. Explicitly show when a metric is unavailable.
+
 ## Confirmed decisions versus proposals and defaults
 
 Every numbered requirement above records a confirmed user decision. Explicitly confirmed defaults include the 60-second claim duration in REQ-28, oldest-first ordering in REQ-26, and the 50 MB single-file limit in REQ-55. The 100 requests-per-second value in REQ-49 is a confirmed test target, not a default rate limit or a benchmark result.

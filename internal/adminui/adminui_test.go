@@ -8,7 +8,7 @@ import (
 )
 
 func TestEmbeddedLocalizedAssets(t *testing.T) {
-	for _, path := range []string{"/admin/", "/admin/app.js", "/admin/i18n.js", "/admin/app.css"} {
+	for _, path := range []string{"/admin/", "/admin/app.js", "/admin/i18n.js", "/admin/app.css", "/admin/favicon.svg"} {
 		w := httptest.NewRecorder()
 		Handler().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 200 {

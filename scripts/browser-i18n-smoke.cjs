@@ -98,6 +98,7 @@ async function main() {
       assert.equal(await page.evaluate(() => [...document.querySelectorAll('#host-rows tr')].some(row => row.cells[0]?.firstChild?.textContent === 'Hosts')), true, 'a user name identical to a translation key stays verbatim');
       await page.locator('a[data-page=agents]').click();
       await page.locator('#new-agent').click();
+      assert.equal(await page.locator('#agent-dialog [data-i18n-language]').count(), 0, `${locale}: agent dialog has no language picker`);
       await page.locator('#agent-name').fill(`fixture-agent-${locale}`);
       const hostId = await page.locator('#agent-host option').filter({ hasText: name }).getAttribute('value');
       await page.locator('#agent-host').selectOption(hostId);

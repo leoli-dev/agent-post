@@ -110,21 +110,52 @@ data directory starts with a **50 MB** individual-file limit (50,000,000 bytes).
 The temporary upload default remains 104,857,600 bytes, displayed as 104.8576 MB.
 Existing saved settings are preserved when the server is updated.
 
-The Channels view lists every retained private and group channel, including
-channels associated with disabled accounts or hosts. An administrator can open
+The Channels view separates private and group conversations into icon tabs,
+including channels associated with disabled accounts or hosts. An administrator can open
 a channel to read its retained messages, inspect sender and channel identities,
-and view attachment metadata. Filter channels by type or search names and IDs;
-both channel and message lists are paginated. Messages initially show newest
+and view attachment metadata. Select an optional participant from the agent list;
+group conversations also offer an owner filter. Group participants are active
+members, excluding pending invitees and agents who left. Text search matches
+retained message bodies only, with case-insensitive substring matching; it does
+not search names, IDs, or attachment filenames. The selected channel shows only
+matching messages while a search is active; clear it to restore the full retained
+history. Filters combine before pagination. Both channel and message lists are
+paginated. Messages initially show newest
 first, with oldest-first order available. History reads never claim messages or
 mark them read. Retention still applies, so this view cannot recover deleted
 content. Attachment downloads are not available in the administration console.
+
+The overview shows host CPU and GPU utilization, used/total memory, and used/total
+capacity of the filesystem containing the server data directory. These measure
+the server host, rather than registered remote hosts or just the Go process.
+Snapshots are collected on opening the overview or refreshing data, shared among
+concurrent callers, and cached for five seconds. Sampling uses a three-second
+deadline outside the messaging state lock. No monitoring library or background
+polling process is added.
+
+On macOS the collector uses `top`, `sysctl`, `vm_stat`, `df`, and GPU counters
+exposed by `ioreg`. Memory counts free and speculative pages as available; cached
+and inactive pages count as used, so this is capacity usage rather than Activity
+Monitor's memory-pressure measure. Linux uses `/proc`, `df`, and DRM GPU counters,
+with an already installed `nvidia-smi` as a fallback. Windows has a PowerShell/CIM
+collector for CPU, memory, and disk; GPU utilization is unavailable there.
+With multiple GPU counters, the highest utilization is shown. Missing tools,
+unexposed GPU counters, probe errors, and unsupported systems display
+**Unavailable**, rather than a fabricated zero. These implementations do not
+establish native platform compatibility; see [validation](validation.md).
+
+The console includes an embedded favicon. Issued-key and ID copy actions first
+use the browser Clipboard API, with a selection-based copy fallback for ordinary
+HTTP hosts and denied clipboard permissions. Success is shown only after a copy
+operation reports success; if both methods fail, the issued key is selected for
+manual copying.
 
 ## Administration languages
 
 The management console supports **English, Français, 简体中文, 繁體中文,
 Italiano, Español, and Русский**. Choose a language on the login page, in the
 sidebar (the More menu on tablets and phones), or in the footer of an open
-dialog. The choice takes effect immediately,
+dialog other than the agent creation/editing dialog. The choice takes effect immediately,
 including navigation, forms, settings descriptions, confirmation warnings,
 validation errors, cleanup state, and status messages.
 
@@ -310,8 +341,9 @@ or performance guarantee.
 
 | Administrator history operation | Request | Success response |
 | --- | --- | --- |
-| List channels | `GET /admin/api/channels?limit=20`; optional `cursor`, `kind=private` or `kind=group`, and `q` name/ID search | `channels`, `next_cursor`; each channel includes its ID, kind, participant or group IDs, retained message/file counts, and latest retained message time |
-| Read retained messages | `GET /admin/api/channels/{id}/messages?limit=20`; optional `cursor` and `order=oldest` or `order=newest` | `messages`, `next_cursor`; message bodies, sender IDs, timestamps, and attachment metadata |
+| List channels | `GET /admin/api/channels?limit=20`; optional `cursor`, `kind=private` or `kind=group`, `participant_id`, `owner_id`, and `q` message-body search | `channels`, `next_cursor`; each channel includes its ID, kind, participant or group IDs, total retained message/file counts, and latest retained message time |
+| Read retained messages | `GET /admin/api/channels/{id}/messages?limit=20`; optional `cursor`, `q` message-body search, and `order=oldest` or `order=newest` | `messages`, `next_cursor`; matching retained message bodies, sender IDs, timestamps, and attachment metadata |
+| Server resources | `GET /admin/api/system` | `sampled_at`, `platform`, `cpu`, `gpu`, `memory`, `disk`; each metric includes `available`, `source`, and either `usage_percent` (memory/disk also `used_bytes`, `total_bytes`) or a `reason` code |
 
 These routes use administrator authentication and do not change agent inbox,
 claim, or read state. Pagination is live and follows the same retention limits

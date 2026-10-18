@@ -56,6 +56,9 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) (any, error) {
 	if p == "session" && r.Method == "GET" {
 		return map[string]any{"csrf_token": sess.CSRF}, nil
 	}
+	if p == "system" && r.Method == "GET" {
+		return systemMetricsRequest{}, nil
+	}
 	if p == "logout" && r.Method == "POST" {
 		if c, e := r.Cookie("ap_admin"); e == nil {
 			delete(s.sessions, c.Value)
@@ -104,7 +107,7 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) (any, error) {
 			if s.st.Channels[parts[1]] == nil {
 				return nil, bad("not_found")
 			}
-			return s.history(r, parts[1], false)
+			return s.historyMatching(r, parts[1], false, adminMessageQuery(r))
 		}
 	}
 	if parts[0] == "hosts" && ((len(parts) == 1 && r.Method == "POST") || (len(parts) == 2 && r.Method == "PATCH")) {
@@ -226,10 +229,20 @@ func (s *Server) adminChannels(r *http.Request) (any, error) {
 	if !validFilter(filter{Kind: kind}) {
 		return nil, bad("invalid_kind")
 	}
-	query := strings.ToLower(r.URL.Query().Get("q"))
+	query := adminMessageQuery(r)
+	participant := r.URL.Query().Get("participant_id")
+	owner := r.URL.Query().Get("owner_id")
+	matchingContent := map[string]bool{}
+	if query != "" {
+		for _, message := range s.st.Messages {
+			if messageBodyMatches(message, query) {
+				matchingContent[message.ChannelID] = true
+			}
+		}
+	}
 	out := []*adminChannel{}
 	for id, ch := range s.st.Channels {
-		if id > c && (kind == "" || ch.Kind == kind) && s.adminChannelMatches(ch, query) {
+		if id > c && (kind == "" || ch.Kind == kind) && s.adminChannelMatches(ch, participant, owner) && (query == "" || matchingContent[id]) {
 			out = append(out, &adminChannel{Channel: ch})
 		}
 	}
@@ -255,27 +268,28 @@ func (s *Server) adminChannels(r *http.Request) (any, error) {
 	return map[string]any{"channels": out, "next_cursor": next}, nil
 }
 
-func (s *Server) adminChannelMatches(ch *Channel, query string) bool {
-	contains := func(value string) bool { return strings.Contains(strings.ToLower(value), query) }
-	if contains(ch.ID) || ch.GroupID != "" && contains(ch.GroupID) {
+func adminMessageQuery(r *http.Request) string {
+	return strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+}
+
+func messageBodyMatches(message *Message, query string) bool {
+	return query == "" || strings.Contains(strings.ToLower(message.Body), query)
+}
+
+func (s *Server) adminChannelMatches(ch *Channel, participant, owner string) bool {
+	group := s.st.Groups[ch.GroupID]
+	if owner != "" && (group == nil || group.OwnerID != owner) {
+		return false
+	}
+	if participant == "" {
 		return true
 	}
-	agentMatches := func(id string) bool {
-		return contains(id) || s.st.Agents[id] != nil && contains(s.st.Agents[id].Name)
+	if ch.Kind == "group" {
+		return group != nil && group.Members[participant] == "active"
 	}
 	for _, id := range ch.AgentIDs {
-		if agentMatches(id) {
+		if id == participant {
 			return true
-		}
-	}
-	if group := s.st.Groups[ch.GroupID]; group != nil {
-		if contains(group.Name) {
-			return true
-		}
-		for id := range group.Members {
-			if agentMatches(id) {
-				return true
-			}
 		}
 	}
 	return false

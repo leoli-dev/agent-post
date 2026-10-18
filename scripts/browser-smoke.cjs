@@ -38,6 +38,11 @@ async function main() {
     const page = await context.newPage();
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(`${base}/admin/`);
+    const faviconURL = await page.locator('link[rel~="icon"]').getAttribute('href');
+    assert.equal(new URL(faviconURL, page.url()).pathname, '/admin/favicon.svg', 'administration declares its favicon');
+    const favicon = await context.request.get(new URL(faviconURL, page.url()).href);
+    assert.equal(favicon.status(), 200, 'favicon is embedded and served');
+    assert.ok((await favicon.text()).includes('<svg'), 'favicon contains SVG artwork');
     await page.getByLabel('Administrator password').fill(password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await page.getByRole('heading', { name: 'Overview', exact: true }).waitFor();
@@ -76,6 +81,7 @@ async function main() {
     assert.equal((await hostOrder()).length, 5);
     await page.getByRole('link', { name: 'Agents', exact: true }).click();
     await page.getByRole('button', { name: 'Create agent', exact: true }).click();
+    assert.equal(await page.locator('#agent-dialog [data-i18n-language]').count(), 0, 'agent creation has no language picker');
     await page.getByLabel('Agent name', { exact: true }).fill('fixture-agent');
     await page.getByRole('button', { name: 'Save agent', exact: true }).click();
     await page.getByRole('heading', { name: 'Agent API key', exact: true }).waitFor();
@@ -84,8 +90,31 @@ async function main() {
     assert.equal(await page.evaluate(() => document.activeElement.id), 'copy-key', 'key dialog focuses the copy action');
     await page.locator('#copy-key').click();
     await page.getByRole('button', { name: 'Copied', exact: true }).waitFor();
-    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), oldKey, 'copy places the issued key on the clipboard');
+    assert.ok(await page.evaluate(async expected => await navigator.clipboard.readText() === expected, oldKey), 'copy places the issued key on the clipboard');
+    // Exercise the real execCommand fallback with the browser clipboard API
+    // absent (as on an HTTP origin) and with an explicitly denied write.
+    await page.evaluate(() => { globalThis.__nativeClipboard = navigator.clipboard; });
+    for (const mode of ['missing', 'denied']) {
+      await page.evaluate(async value => {
+        await globalThis.__nativeClipboard.writeText('synthetic clipboard baseline');
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: value === 'missing' ? undefined : { writeText: async () => { throw new DOMException('synthetic clipboard denial', 'NotAllowedError'); } } });
+      }, mode);
+      await page.locator('#copy-key').click();
+      await page.getByRole('button', { name: 'Copied', exact: true }).waitFor();
+      assert.ok(await page.evaluate(async expected => await globalThis.__nativeClipboard.readText() === expected, oldKey), `${mode} clipboard API falls back to copying the actual issued key`);
+    }
+    await page.evaluate(async () => {
+      await globalThis.__nativeClipboard.writeText('synthetic clipboard unchanged');
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => new Promise((_resolve, reject) => { globalThis.__clipboardReject = reject; }) } });
+    });
+    await page.locator('#copy-key').click();
+    await page.waitForFunction(() => typeof globalThis.__clipboardReject === 'function');
     await page.getByRole('button', { name: 'I saved the key', exact: true }).click();
+    await page.locator('#key-dialog').waitFor({ state: 'hidden' });
+    await page.evaluate(() => globalThis.__clipboardReject(new DOMException('synthetic delayed denial', 'NotAllowedError')));
+    assert.equal(await page.evaluate(() => globalThis.__nativeClipboard.readText()), 'synthetic clipboard unchanged', 'a rejected prompt cannot copy a cleared key after its dialog closes');
+    assert.equal((await page.locator('#copy-key').textContent()).trim(), 'Copy key', 'a late clipboard prompt cannot report success in a closed dialog');
+    await page.evaluate(() => { delete navigator.clipboard; delete globalThis.__nativeClipboard; delete globalThis.__clipboardReject; });
     await page.locator('#agent-rows .cell-name', { hasText: 'fixture-agent' }).waitFor();
     const agentMenu = page.getByRole('button', { name: 'Actions for fixture-agent', exact: true });
     await agentMenu.focus();
@@ -222,6 +251,14 @@ async function main() {
     assert.equal(Number(await fileSize.inputValue()), 0.000001);
     assert.equal(await saveLimits.isDisabled(), true, 'smallest stored size reloads without a dirty form');
     await page.getByRole('link', { name: 'Overview', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#resources-status').dataset.i18n === 'Sampled {time}');
+    for (const resource of ['cpu', 'gpu', 'disk', 'memory']) {
+      const card = page.locator(`#system-resources [data-resource="${resource}"]`);
+      await card.waitFor({ state: 'visible' });
+      const text = await card.textContent();
+      assert.ok(text.trim().length > 0 && !/Loading|NaN|undefined|null/.test(text), `${resource} has a readable usage or availability state`);
+      assert.match((await card.locator('.resource-value').textContent()).trim(), /^(?:\d{1,3}(?:\.\d)?%|Unavailable)$/, `${resource} shows sampled utilization or an explicit unavailable state`);
+    }
     const attention = (await page.locator('#attention-list li').allTextContents()).join('|');
     assert.ok(attention.includes('Agent fixture-agent has not accessed the service yet.'), `overview lists agents needing attention: ${attention}`);
     assert.equal(await page.locator('#setup-panel').isVisible(), false, 'setup checklist hides once hosts and agents exist');
@@ -231,8 +268,9 @@ async function main() {
       await page.screenshot({ path: path.join(process.env.AGENT_POST_SCREENSHOT_DIR, 'admin-desktop.png'), fullPage: true });
     }
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile overview has no horizontal page overflow');
-    if (process.env.AGENT_POST_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.AGENT_POST_SCREENSHOT_DIR, 'admin-mobile.png'), fullPage: true });
+    if (process.env.AGENT_POST_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.AGENT_POST_SCREENSHOT_DIR, 'admin-mobile.png'), fullPage: false });
     await page.getByRole('link', { name: 'Agents', exact: true }).click();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile agent cards fit the viewport');
     assert.equal(await page.locator('#page-agents thead').isVisible(), false, 'phones show cards instead of a table header');
@@ -249,7 +287,7 @@ async function main() {
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await page.getByLabel('Administrator password').waitFor();
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ browser: await browser.version(), viewport: [1440, 390], passed: ['login', 'hosts', 'stable row order', 'dialog initial focus', 'agents', 'filter, sort and status filter', 'key copy', 'keyboard row menus', 'key rotation and old-key rejection', 'disable and enable', 'settings diff, discard and danger confirmation', 'MB defaults, confirmation and persistence', 'existing byte precision and bounds', 'temporary upload budget validation', 'overview attention', 'session reload', 'mobile cards and action sheet', 'logout'], pageErrors: errors }));
+    console.log(JSON.stringify({ browser: await browser.version(), viewport: [1440, 390], passed: ['embedded favicon', 'login', 'hosts', 'stable row order', 'dialog initial focus', 'agents without a dialog language picker', 'filter, sort and status filter', 'native and missing/denied API key clipboard copy', 'closed-dialog clipboard prompt isolation', 'keyboard row menus', 'key rotation and old-key rejection', 'disable and enable', 'settings diff, discard and danger confirmation', 'MB defaults, confirmation and persistence', 'existing byte precision and bounds', 'temporary upload budget validation', 'overview attention and system resources', 'session reload', 'mobile cards and action sheet', 'logout'], pageErrors: errors }));
   } finally {
     if (browser) await browser.close();
     if (server.pid && server.exitCode === null) server.kill('SIGTERM');

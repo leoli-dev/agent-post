@@ -101,6 +101,7 @@ function showLogin() {
   $("#password").value = "";
   setPasswordVisible(false);
   state = {hosts: [], agents: [], groups: [], settings: {}};
+  ++resourceRequest; resources = undefined; resourcesBusy = false; renderResources();
   resetInspector();
   document.querySelectorAll("dialog[open]").forEach(d => d.close());
 }
@@ -148,6 +149,7 @@ function route() {
     else a.removeAttribute("aria-current");
   });
   if (page === "channels" && csrf && !channels.loaded && !channels.busy) loadChannels(true);
+  if (page === "overview" && csrf && !resources && !resourcesBusy) loadResources();
 }
 function ask(title, description, action, {danger = false, subject = "", changes = []} = {}) {
   setMessage($("#confirm-title"), title);
@@ -190,7 +192,33 @@ function setAria(node, key, params = {}) {
   node.setAttribute("aria-label", t(key, params));
 }
 function copyText(text, done) {
-  return navigator.clipboard.writeText(text).then(() => notice(done), () => notice("Copy failed.", true));
+  return writeClipboard(text).then(() => notice(done), () => notice("Copy failed.", true));
+}
+async function writeClipboard(text, field) {
+  // Clipboard API is unavailable on ordinary HTTP hosts. Keep copying usable
+  // there, and when a browser denies clipboard permission, within the click.
+  if (navigator.clipboard?.writeText) {
+    try { await navigator.clipboard.writeText(text); return; } catch {}
+  }
+  // A permission prompt may outlive its dialog. Never copy a different key
+  // from a field reused by a later issuance.
+  if (field && (!field.isConnected || field.value !== text || !field.closest("dialog")?.open)) throw new UIError("Copy failed.");
+  const active = document.activeElement;
+  const selection = window.getSelection();
+  const ranges = selection ? Array.from({length: selection.rangeCount}, (_, i) => selection.getRangeAt(i).cloneRange()) : [];
+  const target = field || el("textarea");
+  if (!field) {
+    target.value = text; target.readOnly = true; target.className = "clipboard-buffer";
+    (document.querySelector("dialog[open]") || document.body).append(target);
+  }
+  let copied = false;
+  try { target.focus({preventScroll: true}); target.select(); copied = document.execCommand("copy"); }
+  finally {
+    if (!field) target.remove();
+    active?.focus({preventScroll: true});
+    if (selection) { selection.removeAllRanges(); ranges.forEach(range => selection.addRange(range)); }
+  }
+  if (!copied) throw new UIError("Copy failed.");
 }
 function shortId(id) {
   const value = String(id), cut = value.indexOf("_") + 7;
@@ -352,12 +380,12 @@ function renderLists() {
     const owner = cell(row); owner.className = "cell-meta2"; owner.append(label("Owner"), el("span", agentName(group.owner_id)));
     const actions = cell(row); actions.className = "cell-actions";
     const view = el("button", undefined, "secondary compact"); view.type = "button"; setMessage(view, "View messages");
-    view.addEventListener("click", () => { location.hash = "#channels"; route(); inspectChannel({id: group.id, group_id: group.id, kind: "group"}); });
+    view.addEventListener("click", () => { setChannelKind("group"); location.hash = "#channels"; route(); inspectChannel({id: group.id, group_id: group.id, kind: "group"}); });
     actions.append(view);
     return row;
   }));
 }
-const channels = {items: [], cursor: "", next: "", back: [], loaded: false, busy: false, request: 0};
+const channels = {kind: "private", items: [], cursor: "", next: "", back: [], loaded: false, busy: false, request: 0};
 const messages = {cursor: "", next: "", back: [], busy: false, request: 0};
 let inspectedChannel;
 let channelSearchTimer;
@@ -368,18 +396,60 @@ function channelName(channel) {
 function absoluteTimeNode(value) {
   const node = el("time", i18n.formatDate(value)); node.dateTime = value; node.dataset.absolute = value; return node;
 }
+function renderChannelFilters() {
+  const nameCounts = new Map();
+  state.agents.forEach(agent => nameCounts.set(agent.name, (nameCounts.get(agent.name) || 0) + 1));
+  for (const [id, key] of [["#channel-participant", "All participants"], ["#channel-owner", "All owners"]]) {
+    const select = $(id), value = select.value;
+    const any = el("option"); any.value = ""; setMessage(any, key);
+    select.replaceChildren(any, ...byName(state.agents).map(agent => {
+      const host = state.hosts.find(host => host.id === agent.host_id);
+      const name = nameCounts.get(agent.name) > 1 ? `${agent.name} · ${host?.name || agent.host_id} · ${shortId(agent.id)}` : agent.name;
+      const option = el("option", name); option.value = agent.id; option.title = agent.id; return option;
+    }));
+    select.value = [...select.options].some(option => option.value === value) ? value : "";
+  }
+}
+function clearChannelDetail() {
+  ++messages.request;
+  Object.assign(messages, {cursor: "", next: "", back: [], busy: false}); inspectedChannel = undefined;
+  $("#message-list").replaceChildren();
+  $("#history-title").textContent = ""; $("#history-channel-id").replaceChildren();
+  $("#channel-detail").hidden = true; $("#history-placeholder").hidden = false;
+  $("#history-status").hidden = true; clearMessage($("#history-error"));
+}
+function updateChannelTabs() {
+  document.querySelectorAll("[data-channel-kind]").forEach(tab => {
+    const selected = tab.dataset.channelKind === channels.kind;
+    tab.setAttribute("aria-selected", String(selected)); tab.tabIndex = selected ? 0 : -1;
+  });
+  $("#channel-panel").setAttribute("aria-labelledby", `channel-tab-${channels.kind}`);
+  $("#channel-owner-field").hidden = channels.kind !== "group";
+}
+function setChannelKind(kind) {
+  channels.kind = kind;
+  $("#channel-query").value = ""; $("#channel-participant").value = ""; $("#channel-owner").value = "";
+  clearChannelDetail(); updateChannelTabs();
+  if (csrf) loadChannels(true);
+}
 function renderChannels() {
   $("#channel-list").replaceChildren(...channels.items.map(channel => {
     const button = el("button", undefined, "channel-choice"); button.type = "button";
     button.dataset.channelId = channel.id; button.setAttribute("aria-pressed", String(channel.id === inspectedChannel?.id));
     setAria(button, "View history for {name}", {name: channelName(channel)});
-    const name = el("strong", channelName(channel));
-    const meta = el("span", undefined, "channel-meta"), kind = el("span"), count = el("span");
-    setMessage(kind, channel.kind === "group" ? "Group" : "Private");
+    const name = el("span", undefined, "channel-name");
+    name.append(icon(channel.kind === "group" ? "i-groups" : "i-channels"), el("strong", channelName(channel)));
+    const meta = el("span", undefined, "channel-meta"), count = el("span");
     setMessage(count, "{count} retained messages", {count: channel.message_count});
-    meta.append(kind, count);
+    meta.append(count);
+    if (channel.kind === "group") {
+      const owner = el("span", undefined, "channel-owner");
+      const group = state.groups.find(group => group.id === channel.group_id);
+      setMessage(owner, "Owner: {name}", {name: agentName(group?.owner_id || "")});
+      meta.append(owner);
+    }
     const files = el("span", undefined, "help"); setMessage(files, "{count} retained files", {count: channel.file_count});
-    button.append(name, meta, files, el("span", channel.id, "channel-id"));
+    button.append(name, meta, files);
     if (channel.last_message_at) button.append(timeNode(channel.last_message_at));
     button.addEventListener("click", () => inspectChannel(channel));
     return button;
@@ -387,7 +457,7 @@ function renderChannels() {
   $("#channels-prev").disabled = channels.busy || !channels.back.length;
   $("#channels-next").disabled = channels.busy || !channels.next;
   $("#channels-empty").hidden = channels.busy || !channels.loaded || channels.items.length > 0 || !!$("#channels-error").textContent;
-  setMessage($("#channels-empty"), $("#channel-query").value.trim() || $("#channel-kind").value ? "No results match the filter." : "No channels yet.");
+  setMessage($("#channels-empty"), $("#channel-query").value.trim() || $("#channel-participant").value || $("#channel-owner").value ? "No results match the filter." : "No channels yet.");
   if (inspectedChannel) $("#history-title").textContent = channelName(inspectedChannel);
 }
 async function loadChannels(reset = false) {
@@ -397,9 +467,10 @@ async function loadChannels(reset = false) {
   channels.busy = true; channels.items = []; channels.next = ""; clearMessage($("#channels-error"));
   setMessage($("#channels-status"), "Loading channels…"); $("#channels-status").hidden = false;
   renderChannels();
-  const query = new URLSearchParams({limit: Math.min(20, state.settings.page_size || 20)});
+  const query = new URLSearchParams({kind: channels.kind, limit: Math.min(20, state.settings.page_size || 20)});
   if (channels.cursor) query.set("cursor", channels.cursor);
-  if ($("#channel-kind").value) query.set("kind", $("#channel-kind").value);
+  if ($("#channel-participant").value) query.set("participant_id", $("#channel-participant").value);
+  if (channels.kind === "group" && $("#channel-owner").value) query.set("owner_id", $("#channel-owner").value);
   if ($("#channel-query").value.trim()) query.set("q", $("#channel-query").value.trim());
   try {
     const result = await api(`channels?${query}`);
@@ -448,12 +519,14 @@ async function loadMessages(reset = false) {
   messages.busy = true; messages.next = ""; clearMessage($("#history-error")); renderMessages([]); messagePaging();
   $("#messages-empty").hidden = true; $("#history-status").hidden = false; setMessage($("#history-status"), "Loading messages…");
   const query = new URLSearchParams({limit: Math.min(20, state.settings.page_size || 20), order: $("#history-order").value});
+  if ($("#channel-query").value.trim()) query.set("q", $("#channel-query").value.trim());
   if (messages.cursor) query.set("cursor", messages.cursor);
   try {
     const result = await api(`channels/${encodeURIComponent(inspectedChannel.id)}/messages?${query}`);
     if (request !== messages.request) return;
     renderMessages(result.messages || []); messages.next = result.next_cursor || "";
     $("#messages-empty").hidden = !!result.messages?.length;
+    setMessage($("#messages-empty"), $("#channel-query").value.trim() ? "No messages match the search." : "No retained messages in this channel.");
   } catch (error) {
     if (request !== messages.request) return;
     showError($("#history-error"), error);
@@ -463,9 +536,10 @@ async function loadMessages(reset = false) {
 }
 function resetInspector() {
   clearTimeout(channelSearchTimer); ++channels.request; ++messages.request;
-  Object.assign(channels, {items: [], cursor: "", next: "", back: [], loaded: false, busy: false});
+  Object.assign(channels, {kind: "private", items: [], cursor: "", next: "", back: [], loaded: false, busy: false});
   Object.assign(messages, {cursor: "", next: "", back: [], busy: false}); inspectedChannel = undefined;
-  $("#channel-query").value = ""; $("#channel-kind").value = ""; $("#history-order").value = "newest";
+  $("#channel-query").value = ""; $("#channel-participant").value = ""; $("#channel-owner").value = ""; $("#history-order").value = "newest";
+  updateChannelTabs();
   $("#channel-list").replaceChildren(); $("#message-list").replaceChildren();
   $("#history-title").textContent = ""; $("#history-channel-id").replaceChildren();
   $("#channel-detail").hidden = true; $("#history-placeholder").hidden = false;
@@ -495,6 +569,7 @@ function render() {
   setNumber($("#overview-revision"), state.settings.revision || 1);
   renderLists();
   renderSettings();
+  renderChannelFilters();
   renderChannels();
 }
 function renderAttention(hosts, agents, disabledHosts) {
@@ -514,6 +589,45 @@ function renderAttention(hosts, agents, disabledHosts) {
   $("#attention-list").replaceChildren(...list);
   $("#attention-list").hidden = !items.length;
   $("#attention-empty").hidden = items.length > 0;
+}
+let resources, resourcesBusy = false, resourceRequest = 0;
+function renderResources() {
+  const percent = new Intl.NumberFormat(i18n.getLocale(), {style: "percent", maximumFractionDigits: 1});
+  const size = value => new Intl.NumberFormat(i18n.getLocale(), {style: "unit", unit: "gigabyte", maximumFractionDigits: 1}).format(value / 1000000000);
+  $("#resource-cards").replaceChildren(...[["cpu", "CPU"], ["gpu", "GPU"], ["memory", "Memory"], ["disk", "Disk"]].map(([key, title]) => {
+    const metric = resources?.[key];
+    const card = el("article", undefined, "resource-card"); card.dataset.resource = key;
+    const name = el("h3"); setMessage(name, title);
+    const value = el("strong", undefined, "resource-value");
+    card.append(name, value);
+    if (metric?.available && Number.isFinite(metric.usage_percent)) {
+      value.textContent = percent.format(metric.usage_percent / 100);
+      const meter = el("meter"); meter.min = 0; meter.max = 100; meter.value = metric.usage_percent;
+      setAria(meter, title); card.append(meter);
+      if (Number.isFinite(metric.used_bytes) && Number.isFinite(metric.total_bytes)) {
+        const detail = el("p", `${size(metric.used_bytes)} / ${size(metric.total_bytes)}`, "help"); card.append(detail);
+      }
+    } else {
+      setMessage(value, resourcesBusy && !resources ? "Loading…" : "Unavailable");
+      const detail = el("p", undefined, "help"); setMessage(detail, "Not exposed by this system."); card.append(detail);
+    }
+    return card;
+  }));
+}
+async function loadResources() {
+  const request = ++resourceRequest;
+  resourcesBusy = true; setMessage($("#resources-status"), "Loading resources…"); renderResources();
+  try {
+    const result = await api("system");
+    if (request !== resourceRequest) return;
+    resources = result;
+    setMessage($("#resources-status"), "Sampled {time}", {time: i18n.formatDate(result.sampled_at)});
+  } catch (error) {
+    if (request !== resourceRequest) return;
+    resources = undefined; showError($("#resources-status"), error);
+  } finally {
+    if (request === resourceRequest) { resourcesBusy = false; renderResources(); }
+  }
 }
 function formatHint(name, value) {
   if (isSizeSetting(name)) return "MB";
@@ -579,6 +693,7 @@ function renderSettings() {
 }
 async function reload() {
   state = await api("state"); refreshedAt = new Date(); render(); showRefreshed();
+  if (!$("#page-overview").hidden && !resourcesBusy) loadResources();
   if (location.hash === "#channels") {
     await loadChannels(true);
     if (inspectedChannel) await loadMessages(true);
@@ -666,9 +781,9 @@ $("#confirm-form").addEventListener("submit", event => {
 document.querySelectorAll(".close-dialog").forEach(node => node.addEventListener("click", () => node.closest("dialog").close()));
 $("#key-dialog").addEventListener("close", () => { $("#issued-key").value = ""; clearMessage($("#issued-agent")); setMessage($("#copy-key"), "Copy key"); });
 $("#copy-key").addEventListener("click", async () => {
-  const field = $("#issued-key");
-  try { await navigator.clipboard.writeText(field.value); setMessage($("#copy-key"), "Copied"); }
-  catch { field.focus(); field.select(); notice("Copy failed. Select the key and copy it manually.", true); }
+  const field = $("#issued-key"), key = field.value;
+  try { await writeClipboard(key, field); if (field.value === key && $("#key-dialog").open) setMessage($("#copy-key"), "Copied"); }
+  catch { if (field.value === key && $("#key-dialog").open) { field.focus(); field.select(); notice("Copy failed. Select the key and copy it manually.", true); } }
 });
 $("#confirm-dialog").addEventListener("close", () => { confirmAction = undefined; });
 $("#new-host").addEventListener("click", () => editHost());
@@ -677,10 +792,20 @@ $("#channel-query").addEventListener("input", () => {
   clearTimeout(channelSearchTimer);
   // Invalidate an in-flight page before the debounce ends.
   ++channels.request; channels.next = ""; channels.busy = true;
+  ++messages.request;
   $("#channels-prev").disabled = true; $("#channels-next").disabled = true;
-  channelSearchTimer = setTimeout(() => loadChannels(true), 250);
+  channelSearchTimer = setTimeout(() => { loadChannels(true); if (inspectedChannel) loadMessages(true); }, 250);
 });
-$("#channel-kind").addEventListener("change", () => loadChannels(true));
+document.querySelectorAll("[data-channel-kind]").forEach(tab => {
+  tab.addEventListener("click", () => { if (channels.kind !== tab.dataset.channelKind) setChannelKind(tab.dataset.channelKind); });
+  tab.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const kind = event.key === "Home" ? "private" : event.key === "End" ? "group" : channels.kind === "private" ? "group" : "private";
+    setChannelKind(kind); $(`#channel-tab-${kind}`).focus();
+  });
+});
+[$("#channel-owner"), $("#channel-participant")].forEach(select => select.addEventListener("change", () => { clearChannelDetail(); loadChannels(true); }));
 $("#channels-next").addEventListener("click", () => { channels.back.push(channels.cursor); channels.cursor = channels.next; loadChannels(); });
 $("#channels-prev").addEventListener("click", () => { channels.cursor = channels.back.pop() || ""; loadChannels(); });
 $("#history-order").addEventListener("change", () => loadMessages(true));
@@ -732,6 +857,8 @@ window.addEventListener("agentpost:languagechange", () => {
   document.querySelectorAll("[data-absolute]").forEach(node => { node.textContent = i18n.formatDate(node.dataset.absolute); });
   document.querySelectorAll("[data-aria-key]").forEach(node => node.setAttribute("aria-label", t(node.dataset.ariaKey, node._ariaParams || {})));
   showRefreshed();
+  renderResources();
+  if (resources?.sampled_at && !resourcesBusy) setMessage($("#resources-status"), "Sampled {time}", {time: i18n.formatDate(resources.sampled_at)});
   document.querySelectorAll(".unit-hint").forEach(node => { const input = node.previousElementSibling; node.textContent = formatHint(input.name, Number(input.value)); });
   document.querySelectorAll("[data-setting-values]").forEach(node => { const {name, values} = node._settingValues; settingMessage(node, node.dataset.i18n, name, values); });
   document.querySelectorAll("#host-count, #agent-count, #group-count, #overview-revision").forEach(node => { if (node._i18nNumber !== undefined) node.textContent = i18n.formatNumber(node._i18nNumber); });

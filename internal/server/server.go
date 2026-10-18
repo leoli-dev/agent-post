@@ -49,6 +49,7 @@ type Server struct {
 	sessions          map[string]session
 	cleanupError      string
 	now               func() time.Time
+	system            *systemMonitor
 }
 
 func secret(prefix string) string {
@@ -69,7 +70,7 @@ func Open(o Options) (*Server, error) {
 	if e := os.Chmod(o.DataDir, 0700); e != nil {
 		return nil, e
 	}
-	s := &Server{opts: o, sessions: map[string]session{}, now: time.Now, authSlots: make(chan struct{}, 4)}
+	s := &Server{opts: o, sessions: map[string]session{}, now: time.Now, authSlots: make(chan struct{}, 4), system: newSystemMonitor(o.DataDir)}
 	var e error
 	s.lock, e = sql.Open("sqlite", filepath.Join(o.DataDir, "process-lock.sqlite"))
 	if e != nil {
@@ -345,6 +346,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		held = false
 		s.mu.Unlock()
 		fail(w, err)
+		return
+	}
+	if _, ok := result.(systemMetricsRequest); ok {
+		// Host probes never hold the message-state lock or write runtime state.
+		held = false
+		s.mu.Unlock()
+		output(w, 200, s.system.snapshot(r.Context()))
 		return
 	}
 	if err = s.save(); err != nil {

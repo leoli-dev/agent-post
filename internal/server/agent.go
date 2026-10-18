@@ -137,6 +137,10 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 // history reads only retained public message data; it never visits delivery or
 // claim state. Callers establish channel access before invoking it.
 func (s *Server) history(r *http.Request, ch string, files bool) (any, error) {
+	return s.historyMatching(r, ch, files, "")
+}
+
+func (s *Server) historyMatching(r *http.Request, ch string, files bool, query string) (any, error) {
 	n, c, e := page(r, s.st.Settings.PageSize)
 	if e != nil {
 		return nil, e
@@ -167,7 +171,7 @@ func (s *Server) history(r *http.Request, ch string, files bool) (any, error) {
 			index = len(s.st.Messages) - 1 - i
 		}
 		m := s.st.Messages[index]
-		if m.ChannelID != ch || (order == "oldest" && m.Sequence <= seq || order == "newest" && m.Sequence >= seq) || files && m.Attachment == nil {
+		if m.ChannelID != ch || (order == "oldest" && m.Sequence <= seq || order == "newest" && m.Sequence >= seq) || files && m.Attachment == nil || !messageBodyMatches(m, query) {
 			continue
 		}
 		if len(out) == n {

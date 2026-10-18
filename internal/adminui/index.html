@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>Agent Post · Administration</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" type="image/svg+xml" href="/admin/favicon.svg">
   <link rel="stylesheet" href="/admin/app.css">
   <script src="/admin/i18n.js" defer></script>
   <script src="/admin/app.js" defer></script>
@@ -82,6 +82,12 @@
             <a class="metric" href="#agents"><span data-i18n="Agents">Agents</span><strong id="agent-count">0</strong><small id="agent-note"></small></a>
             <a class="metric" href="#groups"><span data-i18n="Groups">Groups</span><strong id="group-count">0</strong><small id="group-note"></small></a>
           </div>
+          <section id="system-resources" class="panel system-resources" aria-labelledby="resources-title">
+            <h2 id="resources-title" data-i18n="Server resources">Server resources</h2>
+            <p class="help" data-i18n="Host utilization for this server. Disk refers to the data filesystem. Refresh data to update.">Host utilization for this server. Disk refers to the data filesystem. Refresh data to update.</p>
+            <p id="resources-status" class="help" role="status" data-i18n="Loading resources…">Loading resources…</p>
+            <div id="resource-cards" class="resource-grid"></div>
+          </section>
           <div class="overview-columns">
             <section class="panel"><h2 data-i18n="Needs attention">Needs attention</h2><ul id="attention-list" class="attention-list"></ul><p id="attention-empty" class="attention-empty" data-i18n="Nothing needs attention.">Nothing needs attention.</p></section>
             <section class="panel"><h2 data-i18n="Service status">Service status</h2>
@@ -106,10 +112,17 @@
         </section>
         <section id="page-channels" class="page" hidden>
           <div class="page-head"><p data-i18n="Read retained messages from every private and group channel.">Read retained messages from every private and group channel.</p></div>
-          <div class="toolbar">
-            <div class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="channel-query" type="search" placeholder="Filter channels" data-i18n-placeholder="Filter channels" aria-label="Filter channels" data-i18n-aria-label="Filter channels"></div>
-            <select id="channel-kind" aria-label="Channel type" data-i18n-aria-label="Channel type"><option value="" data-i18n="All channel types">All channel types</option><option value="private" data-i18n="Private">Private</option><option value="group" data-i18n="Group">Group</option></select>
+          <div class="channel-tabs" role="tablist" aria-label="Channel type" data-i18n-aria-label="Channel type">
+            <button id="channel-tab-private" type="button" role="tab" aria-selected="true" aria-controls="channel-panel" data-channel-kind="private"><svg aria-hidden="true"><use href="#i-channels"/></svg><span data-i18n="Private chats">Private chats</span></button>
+            <button id="channel-tab-group" type="button" role="tab" aria-selected="false" aria-controls="channel-panel" tabindex="-1" data-channel-kind="group"><svg aria-hidden="true"><use href="#i-groups"/></svg><span data-i18n="Group chats">Group chats</span></button>
           </div>
+          <div id="channel-panel" role="tabpanel" aria-labelledby="channel-tab-private">
+          <div class="channel-filters">
+            <div class="channel-search"><label for="channel-query" data-i18n="Search messages">Search messages</label><div class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="channel-query" type="search" placeholder="Search message content" data-i18n-placeholder="Search message content" aria-describedby="channel-search-help"></div></div>
+            <div id="channel-owner-field" hidden><label for="channel-owner" data-i18n="Group owner">Group owner</label><select id="channel-owner"><option value="" data-i18n="All owners">All owners</option></select></div>
+            <div><label for="channel-participant" data-i18n="Participant">Participant</label><select id="channel-participant"><option value="" data-i18n="All participants">All participants</option></select></div>
+          </div>
+          <p id="channel-search-help" class="help channel-search-help" data-i18n="Search retained message content. Use filters to select agents.">Search retained message content. Use filters to select agents.</p>
           <div class="channel-workspace">
             <section class="panel channel-browser" aria-label="Channels" data-i18n-aria-label="Channels">
               <p id="channels-status" class="muted" role="status" hidden></p><p id="channels-error" class="error" role="alert"></p>
@@ -130,6 +143,7 @@
               </div>
             </section>
           </div>
+          </div>
         </section>
         <section id="page-settings" class="page" hidden>
           <div class="page-head"><p data-i18n="One set of limits for the service. Every channel counts its own retained messages and files.">One set of limits for the service. Every channel counts its own retained messages and files.</p></div>
@@ -144,7 +158,7 @@
   </div>
 
   <dialog id="host-dialog" aria-labelledby="host-title"><form id="host-form"><div class="dialog-head"><h2 id="host-title" data-i18n="Register host">Register host</h2><button type="button" class="icon-button close-dialog" aria-label="Close" data-i18n-aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="dialog-body"><input name="id" type="hidden"><label for="host-name" data-i18n="Host name">Host name</label><input id="host-name" name="name" required maxlength="120" autofocus><label for="host-os" data-i18n="Operating system">Operating system</label><input id="host-os" name="os" placeholder="e.g. Linux" data-i18n-placeholder="e.g. Linux" maxlength="120"><label for="host-ips" data-i18n="Allowed IP addresses">Allowed IP addresses</label><textarea id="host-ips" name="ips" rows="3" class="mono" placeholder="One exact address per line" data-i18n-placeholder="One exact address per line" required aria-describedby="host-ips-help"></textarea><p id="host-ips-help" class="help" data-i18n="Use IP addresses, without subnets. Forwarding headers do not change the source address.">Use IP addresses, without subnets. Forwarding headers do not change the source address.</p><label for="host-metadata" data-i18n="Additional metadata (JSON object)">Additional metadata (JSON object)</label><textarea id="host-metadata" name="metadata" rows="3" class="mono">{}</textarea><p class="form-error error" role="alert"></p></div><div class="dialog-actions"><label class="language-picker dialog-language"><span data-i18n="Language">Language</span><select data-i18n-language data-i18n-aria-label="Language" aria-label="Language"></select></label><button type="button" class="secondary close-dialog" data-i18n="Cancel">Cancel</button><button type="submit" class="primary" data-i18n="Save host">Save host</button></div></form></dialog>
-  <dialog id="agent-dialog" aria-labelledby="agent-title"><form id="agent-form"><div class="dialog-head"><h2 id="agent-title" data-i18n="Create agent">Create agent</h2><button type="button" class="icon-button close-dialog" aria-label="Close" data-i18n-aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="dialog-body"><input name="id" type="hidden"><label for="agent-name" data-i18n="Agent name">Agent name</label><input id="agent-name" name="name" required maxlength="120" autofocus><label for="agent-host" data-i18n="Registered host">Registered host</label><select id="agent-host" name="host_id" required></select><p class="form-error error" role="alert"></p></div><div class="dialog-actions"><label class="language-picker dialog-language"><span data-i18n="Language">Language</span><select data-i18n-language data-i18n-aria-label="Language" aria-label="Language"></select></label><button type="button" class="secondary close-dialog" data-i18n="Cancel">Cancel</button><button type="submit" class="primary" data-i18n="Save agent">Save agent</button></div></form></dialog>
+  <dialog id="agent-dialog" aria-labelledby="agent-title"><form id="agent-form"><div class="dialog-head"><h2 id="agent-title" data-i18n="Create agent">Create agent</h2><button type="button" class="icon-button close-dialog" aria-label="Close" data-i18n-aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="dialog-body"><input name="id" type="hidden"><label for="agent-name" data-i18n="Agent name">Agent name</label><input id="agent-name" name="name" required maxlength="120" autofocus><label for="agent-host" data-i18n="Registered host">Registered host</label><select id="agent-host" name="host_id" required></select><p class="form-error error" role="alert"></p></div><div class="dialog-actions"><button type="button" class="secondary close-dialog" data-i18n="Cancel">Cancel</button><button type="submit" class="primary" data-i18n="Save agent">Save agent</button></div></form></dialog>
   <dialog id="key-dialog" aria-labelledby="key-title"><div class="dialog-head"><h2 id="key-title" data-i18n="Agent API key">Agent API key</h2><button type="button" class="icon-button close-dialog" aria-label="Close" data-i18n-aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button></div><div class="dialog-body"><p class="callout warn" data-i18n="Save this key now. It is shown only when issued. All sessions of this agent use the same key.">Save this key now. It is shown only when issued. All sessions of this agent use the same key.</p><label for="issued-key" data-i18n="New API key">New API key</label><div class="key-field"><textarea id="issued-key" rows="2" class="mono" readonly spellcheck="false"></textarea><button type="button" id="copy-key" class="secondary" autofocus data-i18n="Copy key">Copy key</button></div><p id="issued-agent" class="help mono"></p></div><div class="dialog-actions"><label class="language-picker dialog-language"><span data-i18n="Language">Language</span><select data-i18n-language data-i18n-aria-label="Language" aria-label="Language"></select></label><button type="button" class="primary close-dialog" data-i18n="I saved the key">I saved the key</button></div></dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description"><form id="confirm-form"><div class="dialog-head"><h2 id="confirm-title" data-i18n="Confirm change">Confirm change</h2></div><div class="dialog-body"><p id="confirm-subject" class="confirm-subject" hidden></p><p id="confirm-description"></p><ul id="confirm-changes" class="change-list" hidden></ul></div><div class="dialog-actions"><label class="language-picker dialog-language"><span data-i18n="Language">Language</span><select data-i18n-language data-i18n-aria-label="Language" aria-label="Language"></select></label><button type="button" class="secondary close-dialog" autofocus data-i18n="Cancel">Cancel</button><button type="submit" id="confirm-action" class="primary" data-i18n="Confirm">Confirm</button></div></form></dialog>
 </body>
