@@ -101,6 +101,7 @@ async function api(path, method = "GET", body) {
     const code = typeof data?.error?.code === "string" && /^[a-z0-9_]{1,80}$/.test(data.error.code) ? data.error.code : `http_${response.status}`;
     const known = ["unauthorized", "csrf_required", "invalid_json", "invalid_unicode", "invalid_settings", "invalid_host", "invalid_ip", "invalid_host_metadata", "invalid_agent", "agent_name_exists", "not_found", "forbidden", "internal_error", "authentication_capacity", "request_too_large"];
     const key = code === "unauthorized" && path === "login" ? "error.login" : known.includes(code) ? `error.${code}` : "error.generic";
+  resetInspector();
     const error = new UIError(key); error.code = code; throw error;
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new UIError("error.response");
@@ -114,7 +115,7 @@ function el(tag, text, cls) {
 }
 function cell(row, text) { const node = el("td", text); row.append(node); return node; }
 function statusCell(row, enabled) { const node = el("span", undefined, enabled ? "status" : "status off"); setMessage(node, enabled ? "Enabled" : "Disabled"); const td = cell(row); td.className = "cell-status"; td.append(node); }
-const pageTitles = {overview: "Overview", hosts: "Hosts", agents: "Agents", groups: "Groups", settings: "Limits & retention"};
+const pageTitles = {overview: "Overview", hosts: "Hosts", agents: "Agents", groups: "Groups", channels: "Channels", settings: "Limits & retention"};
 function route() {
   const names = Object.keys(pageTitles);
   const page = names.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
@@ -146,6 +147,7 @@ function ask(title, description, action, {danger = false, subject = "", changes 
   $("#confirm-action").className = danger ? "danger" : "primary";
   confirmAction = action;
   $("#confirm-dialog").showModal();
+  if (page === "channels" && csrf && !channels.loaded && !channels.busy) loadChannels(true);
 }
 function keyResult(key, agent) {
   $("#issued-key").value = key;
@@ -348,9 +350,128 @@ function render() {
   $("#setup-host").classList.toggle("done", hosts.length > 0);
   $("#setup-agent").classList.toggle("done", agents.length > 0);
   renderAttention(hosts, agents, disabledHosts);
+    const actions = cell(row); actions.className = "cell-actions";
+    const view = el("button", undefined, "secondary compact"); view.type = "button"; setMessage(view, "View messages");
+    view.addEventListener("click", () => { location.hash = "#channels"; route(); inspectChannel({id: group.id, group_id: group.id, kind: "group"}); });
+    actions.append(view);
   const cleanup = state.cleanup || {};
   setMessage($("#cleanup-summary"), cleanup.pending_files ? "Files awaiting deletion: {count}." : "No files awaiting deletion.", {count: cleanup.pending_files || 0});
   const cleanupErrors = {"physical file deletion failed": "cleanup.physical", "staging cleanup failed": "cleanup.staging", "unreferenced file cleanup failed": "cleanup.orphan"};
+const channels = {items: [], cursor: "", next: "", back: [], loaded: false, busy: false, request: 0};
+const messages = {cursor: "", next: "", back: [], busy: false, request: 0};
+let inspectedChannel;
+let channelSearchTimer;
+function agentName(id) { return state.agents.find(agent => agent.id === id)?.name || id; }
+function channelName(channel) {
+  return channel.kind === "group" ? state.groups.find(group => group.id === channel.group_id)?.name || channel.group_id : (channel.agent_ids || []).map(agentName).join(" ↔ ") || channel.id;
+}
+function absoluteTimeNode(value) {
+  const node = el("time", i18n.formatDate(value)); node.dateTime = value; node.dataset.absolute = value; return node;
+}
+function renderChannels() {
+  $("#channel-list").replaceChildren(...channels.items.map(channel => {
+    const button = el("button", undefined, "channel-choice"); button.type = "button";
+    button.dataset.channelId = channel.id; button.setAttribute("aria-pressed", String(channel.id === inspectedChannel?.id));
+    setAria(button, "View history for {name}", {name: channelName(channel)});
+    const name = el("strong", channelName(channel));
+    const meta = el("span", undefined, "channel-meta"), kind = el("span"), count = el("span");
+    setMessage(kind, channel.kind === "group" ? "Group" : "Private");
+    setMessage(count, "{count} retained messages", {count: channel.message_count});
+    meta.append(kind, count);
+    const files = el("span", undefined, "help"); setMessage(files, "{count} retained files", {count: channel.file_count});
+    button.append(name, meta, files, el("span", channel.id, "channel-id"));
+    if (channel.last_message_at) button.append(timeNode(channel.last_message_at));
+    button.addEventListener("click", () => inspectChannel(channel));
+    return button;
+  }));
+  $("#channels-prev").disabled = channels.busy || !channels.back.length;
+  $("#channels-next").disabled = channels.busy || !channels.next;
+  $("#channels-empty").hidden = channels.busy || !channels.loaded || channels.items.length > 0 || !!$("#channels-error").textContent;
+  setMessage($("#channels-empty"), $("#channel-query").value.trim() || $("#channel-kind").value ? "No results match the filter." : "No channels yet.");
+  if (inspectedChannel) $("#history-title").textContent = channelName(inspectedChannel);
+}
+async function loadChannels(reset = false) {
+  clearTimeout(channelSearchTimer);
+  if (reset) { channels.cursor = ""; channels.back = []; }
+  const request = ++channels.request;
+  channels.busy = true; channels.items = []; channels.next = ""; clearMessage($("#channels-error"));
+  setMessage($("#channels-status"), "Loading channels…"); $("#channels-status").hidden = false;
+  renderChannels();
+  const query = new URLSearchParams({limit: Math.min(20, state.settings.page_size || 20)});
+  if (channels.cursor) query.set("cursor", channels.cursor);
+  if ($("#channel-kind").value) query.set("kind", $("#channel-kind").value);
+  if ($("#channel-query").value.trim()) query.set("q", $("#channel-query").value.trim());
+  try {
+    const result = await api(`channels?${query}`);
+    if (request !== channels.request) return;
+    channels.items = result.channels || []; channels.next = result.next_cursor || ""; channels.loaded = true;
+  } catch (error) {
+    if (request !== channels.request) return;
+    showError($("#channels-error"), error);
+  } finally {
+    if (request === channels.request) { channels.busy = false; $("#channels-status").hidden = true; renderChannels(); }
+  }
+}
+function inspectChannel(channel, focus = true) {
+  inspectedChannel = channel;
+  $("#history-placeholder").hidden = true; $("#channel-detail").hidden = false;
+  $("#history-title").textContent = channelName(channel);
+  $("#history-channel-id").replaceChildren(idChip(channel.id));
+  renderChannels();
+  loadMessages(true);
+  if (focus) { $("#history-title").focus({preventScroll: true}); $("#channel-detail").scrollIntoView({block: "nearest"}); }
+}
+function renderMessages(items) {
+  $("#message-list").replaceChildren(...items.map(message => {
+    const item = el("article", undefined, "message"); item.dataset.messageId = message.id;
+    const head = el("header", undefined, "message-head"); head.append(el("strong", agentName(message.sender_id)), absoluteTimeNode(message.created_at));
+    item.append(head, el("p", message.body, "message-body"));
+    if (message.attachment) {
+      const file = message.attachment, attachment = el("div", undefined, "message-attachment"), title = el("span", undefined, "help");
+      setMessage(title, "Attachment");
+      const size = el("span", undefined, "help"); setMessage(size, "{size} bytes", {size: file.size});
+      attachment.append(title, el("span", file.filename, "attachment-name"), size, el("span", file.media_type, "help"), idChip(file.id));
+      item.append(attachment);
+    }
+    const ids = el("div", undefined, "message-identities"); ids.append(idChip(message.sender_id), idChip(message.id)); item.append(ids);
+    return item;
+  }));
+}
+function messagePaging() {
+  $("#messages-prev").disabled = messages.busy || !messages.back.length;
+  $("#messages-next").disabled = messages.busy || !messages.next;
+}
+async function loadMessages(reset = false) {
+  if (!inspectedChannel) return;
+  if (reset) { messages.cursor = ""; messages.back = []; }
+  const request = ++messages.request;
+  messages.busy = true; messages.next = ""; clearMessage($("#history-error")); renderMessages([]); messagePaging();
+  $("#messages-empty").hidden = true; $("#history-status").hidden = false; setMessage($("#history-status"), "Loading messages…");
+  const query = new URLSearchParams({limit: Math.min(20, state.settings.page_size || 20), order: $("#history-order").value});
+  if (messages.cursor) query.set("cursor", messages.cursor);
+  try {
+    const result = await api(`channels/${encodeURIComponent(inspectedChannel.id)}/messages?${query}`);
+    if (request !== messages.request) return;
+    renderMessages(result.messages || []); messages.next = result.next_cursor || "";
+    $("#messages-empty").hidden = !!result.messages?.length;
+  } catch (error) {
+    if (request !== messages.request) return;
+    showError($("#history-error"), error);
+  } finally {
+    if (request === messages.request) { messages.busy = false; $("#history-status").hidden = true; messagePaging(); }
+  }
+}
+function resetInspector() {
+  clearTimeout(channelSearchTimer); ++channels.request; ++messages.request;
+  Object.assign(channels, {items: [], cursor: "", next: "", back: [], loaded: false, busy: false});
+  Object.assign(messages, {cursor: "", next: "", back: [], busy: false}); inspectedChannel = undefined;
+  $("#channel-query").value = ""; $("#channel-kind").value = ""; $("#history-order").value = "newest";
+  $("#channel-list").replaceChildren(); $("#message-list").replaceChildren();
+  $("#history-title").textContent = ""; $("#history-channel-id").replaceChildren();
+  $("#channel-detail").hidden = true; $("#history-placeholder").hidden = false;
+  $("#channels-status").hidden = true; $("#history-status").hidden = true;
+  clearMessage($("#channels-error")); clearMessage($("#history-error"));
+}
   if (cleanup.last_error) setMessage($("#cleanup-error"), cleanupErrors[cleanup.last_error] || "cleanup.generic");
   else clearMessage($("#cleanup-error"));
   setNumber($("#overview-revision"), state.settings.revision || 1);
@@ -374,6 +495,7 @@ function renderAttention(hosts, agents, disabledHosts) {
   $("#attention-list").replaceChildren(...list);
   $("#attention-list").hidden = !items.length;
   $("#attention-empty").hidden = items.length > 0;
+  renderChannels();
 }
 function formatHint(name, value) {
   if (!Number.isFinite(value) || value <= 0) return "";
@@ -436,7 +558,13 @@ function renderSettings() {
   setMessage($("#settings-revision"), "Settings revision {revision}", {revision: state.settings.revision || 1});
   updateSettingsState();
 }
-async function reload() { state = await api("state"); refreshedAt = new Date(); render(); showRefreshed(); }
+async function reload() {
+  state = await api("state"); refreshedAt = new Date(); render(); showRefreshed();
+  if (location.hash === "#channels") {
+    await loadChannels(true);
+    if (inspectedChannel) await loadMessages(true);
+  }
+}
 function editHost(host) {
   const form = $("#host-form"); form.reset();
   form.elements.id.value = host?.id || "";
@@ -545,6 +673,19 @@ document.addEventListener("click", event => {
 });
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && $("#console").classList.contains("menu-open")) { setMenu(false); $("#menu-toggle").focus(); }
+$("#channel-query").addEventListener("input", () => {
+  clearTimeout(channelSearchTimer);
+  // Invalidate an in-flight page before the debounce ends.
+  ++channels.request; channels.next = ""; channels.busy = true;
+  $("#channels-prev").disabled = true; $("#channels-next").disabled = true;
+  channelSearchTimer = setTimeout(() => loadChannels(true), 250);
+});
+$("#channel-kind").addEventListener("change", () => loadChannels(true));
+$("#channels-next").addEventListener("click", () => { channels.back.push(channels.cursor); channels.cursor = channels.next; loadChannels(); });
+$("#channels-prev").addEventListener("click", () => { channels.cursor = channels.back.pop() || ""; loadChannels(); });
+$("#history-order").addEventListener("change", () => loadMessages(true));
+$("#messages-next").addEventListener("click", () => { messages.back.push(messages.cursor); messages.cursor = messages.next; loadMessages(); });
+$("#messages-prev").addEventListener("click", () => { messages.cursor = messages.back.pop() || ""; loadMessages(); });
 });
 $("#password-toggle").addEventListener("click", () => setPasswordVisible($("#password").type === "password"));
 $("#logout").addEventListener("click", async () => { try { await api("logout", "POST", {}); showLogin(); } catch (error) { notice(error, true); } });
@@ -578,3 +719,4 @@ window.addEventListener("hashchange", route);
   try { const session = await api("session"); csrf = session.csrf_token; await reload(); $("#login-view").hidden = true; $("#console").hidden = false; route(); }
   catch { showLogin(); }
 })();
+  document.querySelectorAll("[data-absolute]").forEach(node => { node.textContent = i18n.formatDate(node.dataset.absolute); });

@@ -211,3 +211,37 @@ completed successfully at `011642d`: the admin UI job (Node tests, English
 smoke, and the seven-locale Chromium suite), Linux, macOS, and Windows native
 build/vet/race, and the contract smoke all passed. [Documentation CI](https://github.com/leoli-dev/agent-post/actions/runs/39078068735)
 passed for the same revision.
+
+## Administrator channel history follow-up
+
+Local checks on **2026-10-17** exercised REQ-54's administrator history API and
+console against retained private and group channels. These checks used synthetic
+fixtures and temporary service data; no new throughput measurement or hosted CI
+run is reported for this change.
+
+- `go vet ./...`, documentation checks through REQ-54, JavaScript syntax checks,
+  and `git diff --check` passed. Every Go package passed race tests with
+  `-count=1`, across separate server and remaining-package runs; the server run
+  took 125.049 seconds. All four Node i18n tests passed with complete 226-key
+  catalogs and matching placeholders in all seven locales.
+- Focused backend tests passed administrator cookie and Bearer authentication,
+  expired-session and agent-key rejection, history for disabled identities,
+  retained message/file counts, live cursor traversal across retention gaps,
+  and coupled message/attachment deletion.
+- The existing English and seven-language Chromium suites passed in Chromium
+  151.0.7922.34 at desktop width 1440 and mobile width 390, with zero page
+  JavaScript errors.
+- `scripts/browser-history-smoke.cjs` passed against a real service in the same
+  Chromium version. It covered empty channels and histories, private and group
+  messages, channel type and name/ID search, channel and message pagination,
+  oldest/newest ordering, literal rendering of message bodies, filenames and
+  names, attachment metadata, all seven languages, mobile containment, and
+  administrator cookie-session restoration. A delayed response for a previously
+  selected channel did not overwrite the new selection. The Groups view's
+  shortcut opened the correct channel. Inspection issued only GET requests and
+  preserved unread counts, claim availability, leased state, and the current
+  claim token. Populated desktop and mobile screenshots were visually inspected.
+
+Translations were agent-assisted without native-speaker review. These local
+checks do not establish new platform, integration, performance, or release
+claims.

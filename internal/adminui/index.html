@@ -17,6 +17,7 @@
     <symbol id="i-hosts" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="12" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 4.75h.01M4.5 11.25h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-agents" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m4.8 6.4 2 1.6-2 1.6M8.6 10h2.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-groups" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.8 13.2c.5-2.3 2.2-3.6 4.2-3.6s3.7 1.3 4.2 3.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M10.6 3.4a2.3 2.3 0 0 1 0 4.3M11.6 9.8c1.3.4 2.3 1.6 2.6 3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-channels" viewBox="0 0 16 16"><path d="M2 2.5h12v8H7l-3.5 3v-3H2zM5 5.5h6M5 8h4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-limits" viewBox="0 0 16 16"><path d="M2.5 4.5h5.7M11.8 4.5h1.7M2.5 11.5h1.2M7.3 11.5h6.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="10" cy="4.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.5" cy="11.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.8v2.6h-2.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-more" viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.25" fill="currentColor"/><circle cx="8" cy="8" r="1.25" fill="currentColor"/><circle cx="8" cy="12.5" r="1.25" fill="currentColor"/></symbol>
@@ -57,6 +58,7 @@
         <a href="#hosts" data-page="hosts" data-i18n-title="Hosts" title="Hosts"><svg aria-hidden="true"><use href="#i-hosts"/></svg><span class="nav-label" data-i18n="Hosts">Hosts</span></a>
         <a href="#agents" data-page="agents" data-i18n-title="Agents" title="Agents"><svg aria-hidden="true"><use href="#i-agents"/></svg><span class="nav-label" data-i18n="Agents">Agents</span></a>
         <a href="#groups" data-page="groups" data-i18n-title="Groups" title="Groups"><svg aria-hidden="true"><use href="#i-groups"/></svg><span class="nav-label" data-i18n="Groups">Groups</span></a>
+        <a href="#channels" data-page="channels" data-i18n-title="Channels" title="Channels"><svg aria-hidden="true"><use href="#i-channels"/></svg><span class="nav-label" data-i18n="Channels">Channels</span></a>
         <a href="#settings" data-page="settings" data-i18n-title="Limits &amp; retention" title="Limits &amp; retention"><svg aria-hidden="true"><use href="#i-limits"/></svg><span class="nav-label" data-i18n="Limits &amp; retention">Limits &amp; retention</span><span class="nav-short" aria-hidden="true" data-i18n="Limits">Limits</span></a>
       </nav>
       <div id="account-panel" class="account">
@@ -100,7 +102,34 @@
         </section>
         <section id="page-groups" class="page" hidden>
           <div class="page-head"><p data-i18n="Agents create groups, invite participants, and actively join. This view shows group metadata.">Agents create groups, invite participants, and actively join. This view shows group metadata.</p></div>
-          <div class="toolbar"><div class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="search" class="filter" placeholder="Filter groups" data-i18n-placeholder="Filter groups" aria-label="Filter groups" data-i18n-aria-label="Filter groups"></div><span class="list-count"></span></div><div class="panel table-panel"><table><caption class="sr-only" data-i18n="Agent group spaces">Agent group spaces</caption><thead><tr><th data-sort="name"><button type="button" class="sort"><span data-i18n="Name">Name</span><svg aria-hidden="true"><use href="#i-sort"/></svg></button></th><th data-i18n="Group ID">Group ID</th><th data-sort="owner"><button type="button" class="sort"><span data-i18n="Owner">Owner</span><svg aria-hidden="true"><use href="#i-sort"/></svg></button></th></tr></thead><tbody id="group-rows"></tbody></table><p id="groups-empty" class="empty" data-i18n="Groups appear here when agents create them.">Groups appear here when agents create them.</p></div>
+          <div class="toolbar"><div class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input type="search" class="filter" placeholder="Filter groups" data-i18n-placeholder="Filter groups" aria-label="Filter groups" data-i18n-aria-label="Filter groups"></div><span class="list-count"></span></div><div class="panel table-panel"><table><caption class="sr-only" data-i18n="Agent group spaces">Agent group spaces</caption><thead><tr><th data-sort="name"><button type="button" class="sort"><span data-i18n="Name">Name</span><svg aria-hidden="true"><use href="#i-sort"/></svg></button></th><th data-i18n="Group ID">Group ID</th><th data-sort="owner"><button type="button" class="sort"><span data-i18n="Owner">Owner</span><svg aria-hidden="true"><use href="#i-sort"/></svg></button></th><th class="cell-actions"><span class="sr-only" data-i18n="Actions">Actions</span></th></tr></thead><tbody id="group-rows"></tbody></table><p id="groups-empty" class="empty" data-i18n="Groups appear here when agents create them.">Groups appear here when agents create them.</p></div>
+        </section>
+        <section id="page-channels" class="page" hidden>
+          <div class="page-head"><p data-i18n="Read retained messages from every private and group channel.">Read retained messages from every private and group channel.</p></div>
+          <div class="toolbar">
+            <div class="search"><svg aria-hidden="true"><use href="#i-search"/></svg><input id="channel-query" type="search" placeholder="Filter channels" data-i18n-placeholder="Filter channels" aria-label="Filter channels" data-i18n-aria-label="Filter channels"></div>
+            <select id="channel-kind" aria-label="Channel type" data-i18n-aria-label="Channel type"><option value="" data-i18n="All channel types">All channel types</option><option value="private" data-i18n="Private">Private</option><option value="group" data-i18n="Group">Group</option></select>
+          </div>
+          <div class="channel-workspace">
+            <section class="panel channel-browser" aria-label="Channels" data-i18n-aria-label="Channels">
+              <p id="channels-status" class="muted" role="status" hidden></p><p id="channels-error" class="error" role="alert"></p>
+              <div id="channel-list" class="channel-list"></div>
+              <p id="channels-empty" class="history-empty" data-i18n="No channels yet." hidden>No channels yet.</p>
+              <div class="history-paging"><button id="channels-prev" type="button" class="secondary compact" data-i18n="Previous channels" disabled>Previous channels</button><button id="channels-next" type="button" class="secondary compact" data-i18n="Next channels" disabled>Next channels</button></div>
+            </section>
+            <section class="panel history-panel" aria-label="View messages" data-i18n-aria-label="View messages">
+              <p id="history-placeholder" class="history-empty" data-i18n="Select a channel to read its retained messages.">Select a channel to read its retained messages.</p>
+              <div id="channel-detail" hidden>
+                <header class="history-head"><h2 id="history-title" tabindex="-1"></h2><div id="history-channel-id"></div></header>
+                <p class="help history-note" data-i18n="Retained history only. Reading here does not claim messages or mark them read.">Retained history only. Reading here does not claim messages or mark them read.</p>
+                <label for="history-order" class="sr-only" data-i18n="Message order">Message order</label><select id="history-order"><option value="newest" data-i18n="Newest first">Newest first</option><option value="oldest" data-i18n="Oldest first">Oldest first</option></select>
+                <p id="history-status" class="muted" role="status" hidden></p><p id="history-error" class="error" role="alert"></p>
+                <div id="message-list" class="message-list"></div>
+                <p id="messages-empty" class="history-empty" data-i18n="No retained messages in this channel." hidden>No retained messages in this channel.</p>
+                <div class="history-paging"><button id="messages-prev" type="button" class="secondary compact" data-i18n="Previous messages" disabled>Previous messages</button><button id="messages-next" type="button" class="secondary compact" data-i18n="Next messages" disabled>Next messages</button></div>
+              </div>
+            </section>
+          </div>
         </section>
         <section id="page-settings" class="page" hidden>
           <div class="page-head"><p data-i18n="One set of limits for the service. Every channel counts its own retained messages and files.">One set of limits for the service. Every channel counts its own retained messages and files.</p></div>

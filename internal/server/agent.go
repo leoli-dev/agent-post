@@ -114,54 +114,10 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 		if !s.authorized(a.ID, ch) {
 			return nil, bad("not_group_member")
 		}
-		n, c, e := page(r, s.st.Settings.PageSize)
-		if e != nil {
-			return nil, e
-		}
-		order := r.URL.Query().Get("order")
-		if order == "" {
-			order = "oldest"
-		}
-		if order != "oldest" && order != "newest" {
-			return nil, bad("invalid_order")
-		}
-		seq := int64(0)
-		if order == "newest" {
-			seq = 1<<63 - 1
-		}
-		if c != "" {
-			seq, e = strconv.ParseInt(c, 10, 64)
-			if e != nil {
-				return nil, bad("invalid_cursor")
-			}
-		}
 		if parts[2] != "messages" && parts[2] != "files" {
 			return nil, bad("not_found")
 		}
-		out := []any{}
-		last := int64(0)
-		next := ""
-		for i := 0; i < len(s.st.Messages); i++ {
-			index := i
-			if order == "newest" {
-				index = len(s.st.Messages) - 1 - i
-			}
-			m := s.st.Messages[index]
-			if m.ChannelID != ch || (order == "oldest" && m.Sequence <= seq || order == "newest" && m.Sequence >= seq) || parts[2] == "files" && m.Attachment == nil {
-				continue
-			}
-			if len(out) == n {
-				next = cursor(strconv.FormatInt(last, 10))
-				break
-			}
-			if parts[2] == "files" {
-				out = append(out, map[string]any{"message_id": m.ID, "file": m.Attachment})
-			} else {
-				out = append(out, m)
-			}
-			last = m.Sequence
-		}
-		return map[string]any{parts[2]: out, "next_cursor": next}, nil
+		return s.history(r, ch, parts[2] == "files")
 	}
 	if len(parts) == 3 && parts[0] == "files" && parts[2] == "content" && r.Method == "GET" {
 		for _, m := range s.st.Messages {
@@ -176,6 +132,60 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 		return nil, bad("not_found")
 	}
 	return nil, bad("not_found")
+}
+
+// history reads only retained public message data; it never visits delivery or
+// claim state. Callers establish channel access before invoking it.
+func (s *Server) history(r *http.Request, ch string, files bool) (any, error) {
+	n, c, e := page(r, s.st.Settings.PageSize)
+	if e != nil {
+		return nil, e
+	}
+	order := r.URL.Query().Get("order")
+	if order == "" {
+		order = "oldest"
+	}
+	if order != "oldest" && order != "newest" {
+		return nil, bad("invalid_order")
+	}
+	seq := int64(0)
+	if order == "newest" {
+		seq = 1<<63 - 1
+	}
+	if c != "" {
+		seq, e = strconv.ParseInt(c, 10, 64)
+		if e != nil {
+			return nil, bad("invalid_cursor")
+		}
+	}
+	out := []any{}
+	last := int64(0)
+	next := ""
+	for i := 0; i < len(s.st.Messages); i++ {
+		index := i
+		if order == "newest" {
+			index = len(s.st.Messages) - 1 - i
+		}
+		m := s.st.Messages[index]
+		if m.ChannelID != ch || (order == "oldest" && m.Sequence <= seq || order == "newest" && m.Sequence >= seq) || files && m.Attachment == nil {
+			continue
+		}
+		if len(out) == n {
+			next = cursor(strconv.FormatInt(last, 10))
+			break
+		}
+		if files {
+			out = append(out, map[string]any{"message_id": m.ID, "file": m.Attachment})
+		} else {
+			out = append(out, m)
+		}
+		last = m.Sequence
+	}
+	field := "messages"
+	if files {
+		field = "files"
+	}
+	return map[string]any{field: out, "next_cursor": next}, nil
 }
 
 type filter struct {

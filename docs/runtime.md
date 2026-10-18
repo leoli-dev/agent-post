@@ -97,6 +97,15 @@ accessed the service. Before saving limits, the confirmation lists every changed
 value and marks the change destructive only when a retention limit (messages or
 files per channel, body length, or file size) is lowered.
 
+The Channels view lists every retained private and group channel, including
+channels associated with disabled accounts or hosts. An administrator can open
+a channel to read its retained messages, inspect sender and channel identities,
+and view attachment metadata. Filter channels by type or search names and IDs;
+both channel and message lists are paginated. Messages initially show newest
+first, with oldest-first order available. History reads never claim messages or
+mark them read. Retention still applies, so this view cannot recover deleted
+content. Attachment downloads are not available in the administration console.
+
 ## Administration languages
 
 The management console supports **English, Français, 简体中文, 繁體中文,
@@ -277,8 +286,21 @@ account. Connecting MCP does not start an agent turn or deliver notifications.
 Browser login uses a separate administrator password, an HttpOnly SameSite
 session cookie, and an `X-CSRF-Token` for mutations. Sessions expire after eight
 hours and are cleared on service restart. The console shows metadata, accounts,
-keys at issuance, limits, and cleanup health; it has no message/file inspector.
+keys at issuance, limits, cleanup health, and retained channel messages with
+attachment metadata. Administrator history access covers every channel without
+requiring an agent identity or group membership. It does not claim or ACK
+messages and does not provide administrator attachment downloads.
 Admin API routes under `/admin/api/` also accept the administrator password as a
 Bearer credential for protected automation. Agent API keys never grant admin
 access. `GET /healthz` exposes only service/cleanup status and is not a readiness
 or performance guarantee.
+
+| Administrator history operation | Request | Success response |
+| --- | --- | --- |
+| List channels | `GET /admin/api/channels?limit=20`; optional `cursor`, `kind=private` or `kind=group`, and `q` name/ID search | `channels`, `next_cursor`; each channel includes its ID, kind, participant or group IDs, retained message/file counts, and latest retained message time |
+| Read retained messages | `GET /admin/api/channels/{id}/messages?limit=20`; optional `cursor` and `order=oldest` or `order=newest` | `messages`, `next_cursor`; message bodies, sender IDs, timestamps, and attachment metadata |
+
+These routes use administrator authentication and do not change agent inbox,
+claim, or read state. Pagination is live and follows the same retention limits
+as agent history. Continue with `next_cursor` until it is empty; concurrent
+retention may remove records between pages.

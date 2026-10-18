@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"net/netip"
+	"sort"
 	"strings"
 	"time"
 )
@@ -95,6 +96,17 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) (any, error) {
 		return map[string]any{"settings": in, "cleanup": s.cleanupState()}, nil
 	}
 	parts := strings.Split(p, "/")
+	if parts[0] == "channels" && r.Method == "GET" {
+		if len(parts) == 1 {
+			return s.adminChannels(r)
+		}
+		if len(parts) == 3 && parts[2] == "messages" {
+			if s.st.Channels[parts[1]] == nil {
+				return nil, bad("not_found")
+			}
+			return s.history(r, parts[1], false)
+		}
+	}
 	if parts[0] == "hosts" && ((len(parts) == 1 && r.Method == "POST") || (len(parts) == 2 && r.Method == "PATCH")) {
 		h := Host{Enabled: true, Metadata: map[string]string{}}
 		if len(parts) == 2 {
@@ -196,4 +208,75 @@ func (s *Server) admin(w http.ResponseWriter, r *http.Request) (any, error) {
 		}
 	}
 	return nil, bad("not_found")
+}
+
+type adminChannel struct {
+	*Channel
+	MessageCount  int        `json:"message_count"`
+	FileCount     int        `json:"file_count"`
+	LastMessageAt *time.Time `json:"last_message_at"`
+}
+
+func (s *Server) adminChannels(r *http.Request) (any, error) {
+	n, c, e := page(r, s.st.Settings.PageSize)
+	if e != nil {
+		return nil, e
+	}
+	kind := r.URL.Query().Get("kind")
+	if !validFilter(filter{Kind: kind}) {
+		return nil, bad("invalid_kind")
+	}
+	query := strings.ToLower(r.URL.Query().Get("q"))
+	out := []*adminChannel{}
+	for id, ch := range s.st.Channels {
+		if id > c && (kind == "" || ch.Kind == kind) && s.adminChannelMatches(ch, query) {
+			out = append(out, &adminChannel{Channel: ch})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	next := ""
+	if len(out) > n {
+		next = cursor(out[n-1].ID)
+		out = out[:n]
+	}
+	byID := map[string]*adminChannel{}
+	for _, ch := range out {
+		byID[ch.ID] = ch
+	}
+	for _, m := range s.st.Messages {
+		if ch := byID[m.ChannelID]; ch != nil {
+			ch.MessageCount++
+			if m.Attachment != nil {
+				ch.FileCount++
+			}
+			ch.LastMessageAt = &m.CreatedAt
+		}
+	}
+	return map[string]any{"channels": out, "next_cursor": next}, nil
+}
+
+func (s *Server) adminChannelMatches(ch *Channel, query string) bool {
+	contains := func(value string) bool { return strings.Contains(strings.ToLower(value), query) }
+	if contains(ch.ID) || ch.GroupID != "" && contains(ch.GroupID) {
+		return true
+	}
+	agentMatches := func(id string) bool {
+		return contains(id) || s.st.Agents[id] != nil && contains(s.st.Agents[id].Name)
+	}
+	for _, id := range ch.AgentIDs {
+		if agentMatches(id) {
+			return true
+		}
+	}
+	if group := s.st.Groups[ch.GroupID]; group != nil {
+		if contains(group.Name) {
+			return true
+		}
+		for id := range group.Members {
+			if agentMatches(id) {
+				return true
+			}
+		}
+	}
+	return false
 }

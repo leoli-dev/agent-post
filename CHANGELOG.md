@@ -17,6 +17,7 @@ This file records repository changes. Entries describe source changes; a publish
 - Generated OpenAPI request schemas, pinned modules, complete dependency notices, and native CI definitions.
 
 - Seven-language administration UI with browser detection, saved preference, localized static/dynamic text and validation, and live switching that preserves form/dialog state (REQ-53).
+- Administrator API and seven-language channel history inspector for retained private and group messages, with search, type filters, pagination, message ordering, and attachment metadata (REQ-54).
 
 ### Changed
 

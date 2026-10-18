@@ -302,6 +302,40 @@ tbody tr:hover td { background: var(--surface-hover); }
 .change-list .flag { flex-basis: 100%; color: var(--danger); font-size: 12.5px; font-weight: 600; }
 .change-list li.lowered .values { color: var(--danger); }
 
+/* Retained channel history: channel selection beside a read-only message feed. */
+.channel-workspace { display: grid; grid-template-columns: minmax(220px, 290px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.channel-browser { padding: 8px; min-width: 0; }
+.channel-list { display: grid; gap: 4px; }
+.channel-choice { display: grid; width: 100%; gap: 5px; padding: 12px; text-align: left; font-weight: 400; justify-content: stretch; background: transparent; }
+.channel-choice:hover { background: var(--surface-hover); }
+.channel-choice[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); }
+.channel-choice strong { font-weight: 600; overflow-wrap: anywhere; }
+.channel-choice .channel-meta, .channel-choice time { color: var(--text-3); font-size: 12px; }
+.channel-choice .channel-id { color: var(--text-3); overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 11px; }
+.channel-meta { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.history-panel { min-width: 0; }
+.history-head { display: grid; gap: 6px; scroll-margin-top: 76px; }
+.history-head h2 { font-size: 17px; }
+.history-note { margin-bottom: 16px; }
+#history-order { width: auto; max-width: 100%; margin-bottom: 8px; }
+.history-empty { padding: 20px 12px; color: var(--text-3); }
+.history-paging { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding-top: 12px; }
+.history-paging button { flex: 1; }
+.channel-browser .history-paging { padding: 8px 4px 4px; }
+.channel-browser .error, #channels-status { margin: 8px; }
+.message { padding: 18px 0; border-bottom: 1px solid var(--border); }
+.message:first-child { border-top: 1px solid var(--border); }
+.message-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.message-head strong { overflow-wrap: anywhere; }
+.message-head time { color: var(--text-3); font-size: 12px; }
+.message-body { margin-top: 12px; max-width: none; white-space: pre-wrap; overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.message-attachment { display: grid; gap: 4px; padding: 10px 12px; margin: 12px 0; border: 1px solid var(--border); border-radius: var(--radius-control); overflow-wrap: anywhere; }
+.message-attachment .attachment-name { font-weight: 550; }
+.message-attachment .help { margin: 0; }
+.message-identities { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
+.message-identities .id { font-size: 11px; }
+@media (max-width: 1199px) { .channel-workspace { grid-template-columns: minmax(0, 1fr); } }
+
 /* Dialogs */
 dialog {
   width: min(520px, calc(100% - 32px)); max-height: min(88dvh, 760px); padding: 0; overflow: auto;
@@ -360,7 +394,7 @@ dialog p { font-size: 13.5px; }
   .sidebar { position: static; height: auto; padding: 0; border: 0; background: none; display: contents; }
   .brand { display: none; }
   .nav {
-    position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0;
+    position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0;
     height: calc(var(--tabbar) + env(safe-area-inset-bottom)); padding: 0 4px env(safe-area-inset-bottom);
     background: var(--surface); border-top: 1px solid var(--border);
   }

@@ -87,6 +87,10 @@ The selected direction is a new, agent-first communication service. Earlier rese
 
 - **REQ-53 — Multilingual administration UI.** Provide the administrator management web UI in English, French, Simplified Chinese, Traditional Chinese, Italian, Spanish, and Russian. This requirement was added after the initial implementation; existing requirement IDs remain unchanged.
 
+## Administration channel history
+
+- **REQ-54 — Administrator access to retained channel messages.** An administrator can inspect the database's retained chat records for every private and group channel through the management API and web UI. Inspection is independent of agent membership and does not claim messages or mark them read. Existing retention and deletion rules still apply; discarded content cannot be recovered through this view.
+
 ## Confirmed decisions versus proposals and defaults
 
 Every numbered requirement above records a confirmed user decision. Explicitly confirmed defaults include the 60-second claim duration in REQ-28 and oldest-first ordering in REQ-26. The 100 requests-per-second value in REQ-49 is a confirmed test target, not a default rate limit or a benchmark result.

@@ -69,3 +69,4 @@ jobs:
           node --test internal/adminui/i18n.test.cjs
           node scripts/browser-smoke.cjs
           node scripts/browser-i18n-smoke.cjs
+          node scripts/browser-history-smoke.cjs
