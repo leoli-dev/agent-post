@@ -9,7 +9,7 @@ let confirmAction;
 const settingLabels = {
   message_count: ["Messages per channel", "Keep the newest messages; older messages are deleted."],
   body_codepoints: ["Body length in Unicode code points", "Combining characters and emoji sequences may use several code points."],
-  file_bytes: ["Maximum file size in bytes", "At most one file per message."],
+  file_bytes: ["Maximum file size (MB)", "At most one file per message."],
   file_count: ["Files per channel", "File eviction also deletes its carrying message. Zero disables attachments."],
   claim_seconds: ["Claim duration in seconds", "Applies to new claims. ACK records read status."],
   claim_batch: ["Maximum claim batch", "Maximum messages that one active call can claim."],
@@ -18,7 +18,7 @@ const settingLabels = {
   group_members: ["Maximum group members", "Includes pending invitations."],
   groups_owned: ["Maximum groups owned per agent", "Bounds the spaces one agent can create."],
   concurrent_uploads: ["Concurrent uploads", "Service-wide admission limit."],
-  temporary_upload_bytes: ["Temporary upload budget in bytes", "Must accommodate the maximum file size."]
+  temporary_upload_bytes: ["Temporary upload budget (MB)", "Must accommodate the maximum file size."]
 };
 // Server-side bounds from the admin settings handler, mirrored for early feedback.
 const settingMax = {message_count: 100000, body_codepoints: 1000000, file_bytes: 1073741824, file_count: 100000, claim_seconds: 86400, claim_batch: 1000, page_size: 1000, direct_recipients: 100, group_members: 1000, groups_owned: 1000, concurrent_uploads: 32, temporary_upload_bytes: 4294967296};
@@ -30,6 +30,24 @@ const settingGroups = [
 ];
 // Lowering these deletes stored content (see the server's retention pass).
 const destructiveSettings = ["message_count", "body_codepoints", "file_bytes", "file_count"];
+// Human-facing sizes use decimal MB; HTTP settings continue to use whole bytes.
+const bytesPerMB = 1000000;
+function isSizeSetting(name) { return name === "file_bytes" || name === "temporary_upload_bytes"; }
+function settingInputValue(name, value) { return String(isSizeSetting(name) ? value / bytesPerMB : value); }
+function readSettingValue(input) {
+  const value = Number(input.value);
+  if (!isSizeSetting(input.name)) return value;
+  const bytes = value * bytesPerMB, whole = Math.round(bytes);
+  // Permit binary floating-point noise without silently rounding partial bytes.
+  return Math.abs(bytes - whole) <= Number.EPSILON * Math.max(1, Math.abs(bytes)) * 4 ? whole : NaN;
+}
+function formatSettingValue(name, value) {
+  return isSizeSetting(name) ? t("{value} MB", {value: new Intl.NumberFormat(i18n.getLocale(), {maximumFractionDigits: 6}).format(value / bytesPerMB)}) : value;
+}
+function settingMessage(node, key, name, values) {
+  node.dataset.settingValues = ""; node._settingValues = {name, values};
+  setMessage(node, key, Object.fromEntries(Object.entries(values).map(([key, value]) => [key, formatSettingValue(name, value)])));
+}
 // Message descriptors retain their meaning when the language changes. Never
 // translate user-supplied names, metadata, IDs or credentials.
 function setMessage(node, key, params = {}) {
@@ -83,6 +101,7 @@ function showLogin() {
   $("#password").value = "";
   setPasswordVisible(false);
   state = {hosts: [], agents: [], groups: [], settings: {}};
+  resetInspector();
   document.querySelectorAll("dialog[open]").forEach(d => d.close());
 }
 async function api(path, method = "GET", body) {
@@ -101,7 +120,6 @@ async function api(path, method = "GET", body) {
     const code = typeof data?.error?.code === "string" && /^[a-z0-9_]{1,80}$/.test(data.error.code) ? data.error.code : `http_${response.status}`;
     const known = ["unauthorized", "csrf_required", "invalid_json", "invalid_unicode", "invalid_settings", "invalid_host", "invalid_ip", "invalid_host_metadata", "invalid_agent", "agent_name_exists", "not_found", "forbidden", "internal_error", "authentication_capacity", "request_too_large"];
     const key = code === "unauthorized" && path === "login" ? "error.login" : known.includes(code) ? `error.${code}` : "error.generic";
-  resetInspector();
     const error = new UIError(key); error.code = code; throw error;
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new UIError("error.response");
@@ -129,6 +147,7 @@ function route() {
     if (a.dataset.page === page) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
+  if (page === "channels" && csrf && !channels.loaded && !channels.busy) loadChannels(true);
 }
 function ask(title, description, action, {danger = false, subject = "", changes = []} = {}) {
   setMessage($("#confirm-title"), title);
@@ -136,7 +155,7 @@ function ask(title, description, action, {danger = false, subject = "", changes 
   $("#confirm-changes").replaceChildren(...changes.map(change => {
     const item = el("li", undefined, change.lowered ? "lowered" : "");
     const name = el("span"); setMessage(name, settingLabels[change.name][0]);
-    const values = el("span", undefined, "values"); setMessage(values, "{old} → {new}", {old: change.old, new: change.new});
+    const values = el("span", undefined, "values"); settingMessage(values, "{old} → {new}", change.name, {old: change.old, new: change.new});
     item.append(name, values);
     if (change.lowered) { const flag = el("span", undefined, "flag"); setMessage(flag, "Lowered"); item.append(flag); }
     return item;
@@ -147,7 +166,6 @@ function ask(title, description, action, {danger = false, subject = "", changes 
   $("#confirm-action").className = danger ? "danger" : "primary";
   confirmAction = action;
   $("#confirm-dialog").showModal();
-  if (page === "channels" && csrf && !channels.loaded && !channels.busy) loadChannels(true);
 }
 function keyResult(key, agent) {
   $("#issued-key").value = key;
@@ -332,31 +350,13 @@ function renderLists() {
     const name = cell(row); name.className = "cell-name"; name.append(el("span", group.name, "primary"));
     const id = cell(row); id.className = "cell-meta1"; id.append(idChip(group.id));
     const owner = cell(row); owner.className = "cell-meta2"; owner.append(label("Owner"), el("span", agentName(group.owner_id)));
-    return row;
-  }));
-}
-function render() {
-  const hosts = state.hosts || [], agents = state.agents || [], groups = state.groups || [];
-  const disabledHosts = hosts.filter(host => !host.enabled), disabledAgents = agents.filter(agent => !agent.enabled);
-  setNumber($("#host-count"), hosts.length);
-  setNumber($("#agent-count"), agents.length);
-  setNumber($("#group-count"), groups.length);
-  for (const [node, items, disabled] of [[$("#host-note"), hosts, disabledHosts], [$("#agent-note"), agents, disabledAgents]]) {
-    if (!items.length) clearMessage(node);
-    else setMessage(node, disabled.length ? "Disabled: {count}" : "All enabled", {count: disabled.length});
-    node.classList.toggle("warn", disabled.length > 0);
-  }
-  $("#setup-panel").hidden = hosts.length > 0 && agents.length > 0;
-  $("#setup-host").classList.toggle("done", hosts.length > 0);
-  $("#setup-agent").classList.toggle("done", agents.length > 0);
-  renderAttention(hosts, agents, disabledHosts);
     const actions = cell(row); actions.className = "cell-actions";
     const view = el("button", undefined, "secondary compact"); view.type = "button"; setMessage(view, "View messages");
     view.addEventListener("click", () => { location.hash = "#channels"; route(); inspectChannel({id: group.id, group_id: group.id, kind: "group"}); });
     actions.append(view);
-  const cleanup = state.cleanup || {};
-  setMessage($("#cleanup-summary"), cleanup.pending_files ? "Files awaiting deletion: {count}." : "No files awaiting deletion.", {count: cleanup.pending_files || 0});
-  const cleanupErrors = {"physical file deletion failed": "cleanup.physical", "staging cleanup failed": "cleanup.staging", "unreferenced file cleanup failed": "cleanup.orphan"};
+    return row;
+  }));
+}
 const channels = {items: [], cursor: "", next: "", back: [], loaded: false, busy: false, request: 0};
 const messages = {cursor: "", next: "", back: [], busy: false, request: 0};
 let inspectedChannel;
@@ -472,11 +472,30 @@ function resetInspector() {
   $("#channels-status").hidden = true; $("#history-status").hidden = true;
   clearMessage($("#channels-error")); clearMessage($("#history-error"));
 }
+function render() {
+  const hosts = state.hosts || [], agents = state.agents || [], groups = state.groups || [];
+  const disabledHosts = hosts.filter(host => !host.enabled), disabledAgents = agents.filter(agent => !agent.enabled);
+  setNumber($("#host-count"), hosts.length);
+  setNumber($("#agent-count"), agents.length);
+  setNumber($("#group-count"), groups.length);
+  for (const [node, items, disabled] of [[$("#host-note"), hosts, disabledHosts], [$("#agent-note"), agents, disabledAgents]]) {
+    if (!items.length) clearMessage(node);
+    else setMessage(node, disabled.length ? "Disabled: {count}" : "All enabled", {count: disabled.length});
+    node.classList.toggle("warn", disabled.length > 0);
+  }
+  $("#setup-panel").hidden = hosts.length > 0 && agents.length > 0;
+  $("#setup-host").classList.toggle("done", hosts.length > 0);
+  $("#setup-agent").classList.toggle("done", agents.length > 0);
+  renderAttention(hosts, agents, disabledHosts);
+  const cleanup = state.cleanup || {};
+  setMessage($("#cleanup-summary"), cleanup.pending_files ? "Files awaiting deletion: {count}." : "No files awaiting deletion.", {count: cleanup.pending_files || 0});
+  const cleanupErrors = {"physical file deletion failed": "cleanup.physical", "staging cleanup failed": "cleanup.staging", "unreferenced file cleanup failed": "cleanup.orphan"};
   if (cleanup.last_error) setMessage($("#cleanup-error"), cleanupErrors[cleanup.last_error] || "cleanup.generic");
   else clearMessage($("#cleanup-error"));
   setNumber($("#overview-revision"), state.settings.revision || 1);
   renderLists();
   renderSettings();
+  renderChannels();
 }
 function renderAttention(hosts, agents, disabledHosts) {
   const off = new Set(disabledHosts.map(host => host.id));
@@ -495,15 +514,11 @@ function renderAttention(hosts, agents, disabledHosts) {
   $("#attention-list").replaceChildren(...list);
   $("#attention-list").hidden = !items.length;
   $("#attention-empty").hidden = items.length > 0;
-  renderChannels();
 }
 function formatHint(name, value) {
+  if (isSizeSetting(name)) return "MB";
   if (!Number.isFinite(value) || value <= 0) return "";
   const locale = i18n.getLocale();
-  if (name.endsWith("bytes") && value >= 1024) {
-    const [size, unit] = value >= 1 << 30 ? [value / (1 << 30), "GiB"] : value >= 1 << 20 ? [value / (1 << 20), "MiB"] : [value / 1024, "KiB"];
-    return `= ${new Intl.NumberFormat(locale, {maximumFractionDigits: 1}).format(size)} ${unit}`;
-  }
   if (name === "claim_seconds" && value >= 60) {
     const [size, unit] = value >= 3600 ? [value / 3600, "hour"] : [value / 60, "minute"];
     return `= ${new Intl.NumberFormat(locale, {style: "unit", unit, unitDisplay: "long", maximumFractionDigits: 1}).format(size)}`;
@@ -513,17 +528,21 @@ function formatHint(name, value) {
 let settingsBaseline = {};
 function settingChanges() {
   return [...$("#settings-fields").querySelectorAll("input")]
-    .filter(input => input.value !== "" && Number(input.value) !== settingsBaseline[input.name])
-    .map(input => ({name: input.name, old: settingsBaseline[input.name], new: Number(input.value), lowered: destructiveSettings.includes(input.name) && Number(input.value) < settingsBaseline[input.name]}));
+    .filter(input => input.value !== "" && readSettingValue(input) !== settingsBaseline[input.name])
+    .map(input => ({name: input.name, old: settingsBaseline[input.name], new: readSettingValue(input), lowered: destructiveSettings.includes(input.name) && readSettingValue(input) < settingsBaseline[input.name]}));
 }
 function updateSettingsState() {
   const changes = settingChanges(), changed = new Set(changes.map(change => change.name));
   $("#settings-fields").querySelectorAll("input").forEach(input => {
     const wrap = input.closest(".field"), was = wrap.querySelector(".was");
     wrap.classList.toggle("changed", changed.has(input.name));
-    if (changed.has(input.name)) setMessage(was, "Was {value}", {value: settingsBaseline[input.name]}); else clearMessage(was);
+    if (changed.has(input.name)) settingMessage(was, "Was {value}", input.name, {value: settingsBaseline[input.name]}); else { delete was.dataset.settingValues; delete was._settingValues; clearMessage(was); }
     was.hidden = !changed.has(input.name);
-    wrap.querySelector(".unit-hint").textContent = formatHint(input.name, Number(input.value));
+    if (isSizeSetting(input.name)) {
+      input.setCustomValidity("");
+      if (input.value !== "" && !Number.isSafeInteger(readSettingValue(input))) input.setCustomValidity(t("Enter a positive size in MB, precise to one byte."));
+    }
+    wrap.querySelector(".unit-hint").textContent = isSizeSetting(input.name) ? "MB" : formatHint(input.name, Number(input.value));
   });
   setMessage($("#settings-dirty"), changes.length ? "Unsaved changes: {count}" : "No unsaved changes", {count: changes.length});
   $("#settings-form").classList.toggle("dirty", changes.length > 0);
@@ -543,8 +562,8 @@ function renderSettings() {
         const [labelKey, help] = settingLabels[name];
         const wrap = el("div", undefined, "field"), lbl = el("label"); setMessage(lbl, labelKey); lbl.htmlFor = `setting-${name}`;
         const row = el("div", undefined, "input-row");
-        const input = el("input"); input.type = "number"; input.inputMode = "numeric"; input.id = `setting-${name}`; input.name = name; input.value = state.settings[name];
-        input.min = name === "file_count" ? "0" : "1"; input.max = String(settingMax[name]); input.step = "1"; input.required = true;
+        const input = el("input"); input.type = "number"; input.inputMode = isSizeSetting(name) ? "decimal" : "numeric"; input.id = `setting-${name}`; input.name = name; input.value = settingInputValue(name, state.settings[name]);
+        input.min = settingInputValue(name, name === "file_count" ? 0 : 1); input.max = settingInputValue(name, settingMax[name]); input.step = isSizeSetting(name) ? "any" : "1"; input.required = true;
         const unit = el("span", undefined, "unit-hint"); unit.setAttribute("aria-hidden", "true");
         row.append(input, unit);
         const hint = el("p", undefined, "help"); setMessage(hint, help); hint.id = `help-${name}`; input.setAttribute("aria-describedby", hint.id);
@@ -625,14 +644,14 @@ $("#agent-form").addEventListener("submit", event => {
 });
 $("#settings-form").addEventListener("input", updateSettingsState);
 $("#settings-discard").addEventListener("click", () => {
-  $("#settings-fields").querySelectorAll("input").forEach(input => { input.value = settingsBaseline[input.name]; input.setCustomValidity(""); });
+  $("#settings-fields").querySelectorAll("input").forEach(input => { input.value = settingInputValue(input.name, settingsBaseline[input.name]); input.setCustomValidity(""); });
   updateSettingsState();
 });
 $("#settings-form").addEventListener("submit", event => {
   event.preventDefault(); const form = event.currentTarget;
   if (!form.reportValidity()) return;
   const settings = {...state.settings};
-  for (const [name] of Object.entries(settingLabels)) if (form.elements[name]) settings[name] = Number(form.elements[name].value);
+  for (const [name] of Object.entries(settingLabels)) if (form.elements[name]) settings[name] = readSettingValue(form.elements[name]);
   if (Object.entries(settings).some(([name, value]) => name !== "revision" && (!Number.isSafeInteger(value) || value < (name === "file_count" ? 0 : 1)))) { notice("Use whole numbers within the permitted limits.", true); return; }
   const changes = settingChanges();
   if (!changes.length) return;
@@ -654,6 +673,19 @@ $("#copy-key").addEventListener("click", async () => {
 $("#confirm-dialog").addEventListener("close", () => { confirmAction = undefined; });
 $("#new-host").addEventListener("click", () => editHost());
 $("#new-agent").addEventListener("click", () => editAgent());
+$("#channel-query").addEventListener("input", () => {
+  clearTimeout(channelSearchTimer);
+  // Invalidate an in-flight page before the debounce ends.
+  ++channels.request; channels.next = ""; channels.busy = true;
+  $("#channels-prev").disabled = true; $("#channels-next").disabled = true;
+  channelSearchTimer = setTimeout(() => loadChannels(true), 250);
+});
+$("#channel-kind").addEventListener("change", () => loadChannels(true));
+$("#channels-next").addEventListener("click", () => { channels.back.push(channels.cursor); channels.cursor = channels.next; loadChannels(); });
+$("#channels-prev").addEventListener("click", () => { channels.cursor = channels.back.pop() || ""; loadChannels(); });
+$("#history-order").addEventListener("change", () => loadMessages(true));
+$("#messages-next").addEventListener("click", () => { messages.back.push(messages.cursor); messages.cursor = messages.next; loadMessages(); });
+$("#messages-prev").addEventListener("click", () => { messages.cursor = messages.back.pop() || ""; loadMessages(); });
 $("#refresh").addEventListener("click", () => reload().then(() => notice("Data refreshed.")).catch(error => notice(error, true)));
 $("#cleanup-retry").addEventListener("click", () => api("cleanup", "POST", {}).then(reload).then(() => notice("Cleanup retried.")).catch(error => notice(error, true)));
 document.querySelectorAll(".filter, .status-filter").forEach(control => control.addEventListener("input", renderLists));
@@ -673,19 +705,6 @@ document.addEventListener("click", event => {
 });
 document.addEventListener("keydown", event => {
   if (event.key === "Escape" && $("#console").classList.contains("menu-open")) { setMenu(false); $("#menu-toggle").focus(); }
-$("#channel-query").addEventListener("input", () => {
-  clearTimeout(channelSearchTimer);
-  // Invalidate an in-flight page before the debounce ends.
-  ++channels.request; channels.next = ""; channels.busy = true;
-  $("#channels-prev").disabled = true; $("#channels-next").disabled = true;
-  channelSearchTimer = setTimeout(() => loadChannels(true), 250);
-});
-$("#channel-kind").addEventListener("change", () => loadChannels(true));
-$("#channels-next").addEventListener("click", () => { channels.back.push(channels.cursor); channels.cursor = channels.next; loadChannels(); });
-$("#channels-prev").addEventListener("click", () => { channels.cursor = channels.back.pop() || ""; loadChannels(); });
-$("#history-order").addEventListener("change", () => loadMessages(true));
-$("#messages-next").addEventListener("click", () => { messages.back.push(messages.cursor); messages.cursor = messages.next; loadMessages(); });
-$("#messages-prev").addEventListener("click", () => { messages.cursor = messages.back.pop() || ""; loadMessages(); });
 });
 $("#password-toggle").addEventListener("click", () => setPasswordVisible($("#password").type === "password"));
 $("#logout").addEventListener("click", async () => { try { await api("logout", "POST", {}); showLogin(); } catch (error) { notice(error, true); } });
@@ -694,12 +713,15 @@ function localizeValidity(control) {
   if (!control.setCustomValidity || control.tagName === "BUTTON") return;
   control.setCustomValidity("");
   const validity = control.validity;
-  if (validity.valid) return;
+  if (validity.valid) {
+    if (isSizeSetting(control.name) && control.value !== "" && !Number.isSafeInteger(readSettingValue(control))) control.setCustomValidity(t("Enter a positive size in MB, precise to one byte."));
+    return;
+  }
   let key = "validation.generic", params = {};
   if (validity.valueMissing) key = "validation.required";
   else if (validity.badInput || validity.stepMismatch) key = "validation.number";
-  else if (validity.rangeUnderflow) { key = "validation.minimum"; params.minimum = Number(control.min); }
-  else if (validity.rangeOverflow) { key = "validation.maximum"; params.maximum = Number(control.max); }
+  else if (validity.rangeUnderflow) { key = "validation.minimum"; params.minimum = isSizeSetting(control.name) ? formatSettingValue(control.name, Math.round(Number(control.min) * bytesPerMB)) : Number(control.min); }
+  else if (validity.rangeOverflow) { key = "validation.maximum"; params.maximum = isSizeSetting(control.name) ? formatSettingValue(control.name, Math.round(Number(control.max) * bytesPerMB)) : Number(control.max); }
   control.setCustomValidity(t(key, params));
 }
 document.addEventListener("invalid", event => localizeValidity(event.target), true);
@@ -707,9 +729,11 @@ document.addEventListener("input", event => { if (event.target.setCustomValidity
 window.addEventListener("agentpost:languagechange", () => {
   // Update text in place: no rerender, form reset, modal close or API request.
   document.querySelectorAll("[data-relative]").forEach(node => { node.textContent = relativeTime(node.dataset.relative); node.title = i18n.formatDate(node.dataset.relative); });
+  document.querySelectorAll("[data-absolute]").forEach(node => { node.textContent = i18n.formatDate(node.dataset.absolute); });
   document.querySelectorAll("[data-aria-key]").forEach(node => node.setAttribute("aria-label", t(node.dataset.ariaKey, node._ariaParams || {})));
   showRefreshed();
   document.querySelectorAll(".unit-hint").forEach(node => { const input = node.previousElementSibling; node.textContent = formatHint(input.name, Number(input.value)); });
+  document.querySelectorAll("[data-setting-values]").forEach(node => { const {name, values} = node._settingValues; settingMessage(node, node.dataset.i18n, name, values); });
   document.querySelectorAll("#host-count, #agent-count, #group-count, #overview-revision").forEach(node => { if (node._i18nNumber !== undefined) node.textContent = i18n.formatNumber(node._i18nNumber); });
   document.querySelectorAll("[data-i18n]").forEach(node => { if (node._supportCode) node.textContent += ` ${t("Support code: {code}", {code: node._supportCode})}`; });
   document.querySelectorAll("input, select, textarea").forEach(control => { if (control.validity.customError) localizeValidity(control); });
@@ -719,4 +743,3 @@ window.addEventListener("hashchange", route);
   try { const session = await api("session"); csrf = session.csrf_token; await reload(); $("#login-view").hidden = true; $("#console").hidden = false; route(); }
   catch { showLogin(); }
 })();
-  document.querySelectorAll("[data-absolute]").forEach(node => { node.textContent = i18n.formatDate(node.dataset.absolute); });

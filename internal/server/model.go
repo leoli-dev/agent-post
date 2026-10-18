@@ -19,7 +19,7 @@ type Settings struct {
 }
 
 func defaults() Settings {
-	return Settings{1, 100, 8192, 25 << 20, 10, 60, 50, 100, 16, 64, 32, 4, 100 << 20}
+	return Settings{1, 100, 8192, 50_000_000, 10, 60, 50, 100, 16, 64, 32, 4, 100 << 20}
 }
 
 type Host struct {

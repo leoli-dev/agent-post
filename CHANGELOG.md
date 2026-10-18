@@ -21,6 +21,7 @@ This file records repository changes. Entries describe source changes; a publish
 
 ### Changed
 
+- Administration file-size settings use MB for inputs and change confirmations; new data directories default to a 50 MB single-file limit (REQ-55).
 - Administration console redesign: token-based light/dark styling with system fonts, sidebar/icon-rail/bottom-tab layouts, status-oriented overview, filterable and sortable lists with stable name order, row action menus, phone cards and bottom sheets, ID and key copy actions, grouped limits with unit equivalents and a change-diff confirmation, and dialog focus on the first task control.
 
 ### Verification

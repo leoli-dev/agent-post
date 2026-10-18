@@ -97,6 +97,13 @@ accessed the service. Before saving limits, the confirmation lists every changed
 value and marks the change destructive only when a retention limit (messages or
 files per channel, body length, or file size) is lowered.
 
+The settings form displays and accepts the individual-file limit and temporary
+upload budget in decimal MB: **1 MB = 1,000,000 bytes**. Change confirmations use
+the same unit. HTTP settings and persisted values still use integer bytes. A new
+data directory starts with a **50 MB** individual-file limit (50,000,000 bytes).
+The temporary upload default remains 104,857,600 bytes, displayed as 104.8576 MB.
+Existing saved settings are preserved when the server is updated.
+
 The Channels view lists every retained private and group channel, including
 channels associated with disabled accounts or hosts. An administrator can open
 a channel to read its retained messages, inspect sender and channel identities,
@@ -165,7 +172,7 @@ inspect every result even if the command exits successfully.
 
 All IDs and tokens above are synthetic placeholders. Downloads require an
 explicit destination and refuse to replace an existing file. They do not ACK.
-Downloads have a 1 GiB client ceiling, with a 25 MiB initial server file limit.
+Downloads have a 1 GiB client ceiling, with a 50 MB initial server file limit.
 Commands also accept `--json OBJECT` instead of individual field flags.
 
 ```sh

@@ -14,15 +14,19 @@ Use Go, the standard HTTP server, embedded templates/assets for administration, 
 
 Go is a recommendation within the user's Go-or-Rust preference, not a user-confirmed language decision. Actual dependency versions are now pinned in `go.mod` and `go.sum`. The proposal below remains distinct from user-confirmed product requirements. [Architecture](architecture.md) and [distribution](distribution.md) explain the rationale and verification boundary.
 
-## Proposed defaults requiring review
+## Defaults and remaining proposals
 
-Only the 60-second default claim duration and the 100 RPS ordinary-API benchmark target were confirmed numerically. The values below are proposals, visible through the limits API if adopted.
+The 60-second default claim duration, the 50 MB single-file default in REQ-55,
+and the 100 RPS ordinary-API benchmark target are confirmed numerically. Other
+values below remain proposals, visible through the limits API if adopted.
+Administration file-size inputs use decimal MB (1 MB = 1,000,000 bytes), while
+HTTP and stored settings remain byte counts; see [runtime](runtime.md).
 
-| Setting | Proposed starting point | Reason |
+| Setting | Starting point | Reason |
 | --- | --- | --- |
 | Retained messages | 100 per channel | Bounded short-term mailbox/history |
 | Body length | 8,192 Unicode code points | Useful agent text without unlimited payloads |
-| Single file | 25 MiB | Conservative initial attachment budget |
+| Single file | 50 MB | Confirmed default in REQ-55 |
 | Attached-file messages | 10 per channel | Independent file cap, with whole-message cascade |
 | Claim batch | At most 50 deliveries | Bounded responses and short claim transactions |
 | History/directory page | At most 100 records | Predictable pagination |

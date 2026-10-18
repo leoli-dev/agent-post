@@ -113,22 +113,55 @@ async function main() {
       await page.locator('#key-dialog .dialog-actions .close-dialog').click();
       await page.locator('#key-dialog').waitFor({ state: 'hidden' });
       await page.locator('a[data-page=settings]').click();
+      const fileInput = page.locator('#setting-file_bytes'), budgetInput = page.locator('#setting-temporary_upload_bytes');
+      const oldFileMB = Number(await fileInput.inputValue()), oldBudgetMB = Number(await budgetInput.inputValue());
+      const newFileMB = 12.5 + locales.indexOf(locale), newBudgetMB = 75.5 + locales.indexOf(locale);
+      if (locale === 'en') assert.equal(oldFileMB, 50, 'a fresh installation defaults to 50 MB');
+      const mb = (value, language) => `${new Intl.NumberFormat(language, { maximumFractionDigits: 6 }).format(value)} MB`;
+      const checkMBFeedback = async language => {
+        for (const [input, oldValue] of [[fileInput, oldFileMB], [budgetInput, oldBudgetMB]]) {
+          const field = input.locator('xpath=ancestor::div[contains(@class,"field")]');
+          assert.ok((await field.locator('label').textContent()).includes('MB'), `${language}: size labels specify MB`);
+          assert.ok((await field.locator('.was').textContent()).includes(mb(oldValue, language)), `${language}: previous values use localized MB`);
+          assert.equal((await field.locator('.unit-hint').textContent()).trim(), 'MB', `${language}: MB unit remains visible`);
+        }
+      };
+      await fileInput.fill(String(newFileMB));
+      await budgetInput.fill(String(newBudgetMB));
+      await checkMBFeedback(locale);
       await page.locator('#setting-message_count').fill(String(110 + locales.indexOf(locale)));
       await switchInPlace(next);
       assert.equal(await page.locator('#setting-message_count').inputValue(), String(110 + locales.indexOf(locale)), 'unsaved settings survive a language switch');
+      assert.equal(await fileInput.inputValue(), String(newFileMB), 'unsaved MB values survive language switching');
+      await checkMBFeedback(next);
       await switchInPlace(locale);
       await page.locator('#settings-form button[type=submit]').click();
       await page.locator('#confirm-dialog').waitFor({ state: 'visible' });
+      const checkMBConfirmation = async language => {
+        const values = await page.locator('#confirm-changes .values').allTextContents();
+        assert.ok(values.includes(`${mb(oldFileMB, language)} → ${mb(newFileMB, language)}`), `${language}: file-size confirmation uses MB`);
+        assert.ok(values.includes(`${mb(oldBudgetMB, language)} → ${mb(newBudgetMB, language)}`), `${language}: temporary budget confirmation uses MB`);
+        assert.ok(!values.some(value => value.includes(String(newFileMB * 1000000))), `${language}: confirmation does not expose raw byte values`);
+      };
+      await checkMBConfirmation(locale);
       await switchInPlace(next);
+      await checkMBFeedback(next);
+      await checkMBConfirmation(next);
       const saving = page.waitForResponse(response => response.url().endsWith('/admin/api/settings') && response.request().method() === 'PUT');
       await page.locator('#confirm-action').click();
       const saved = await saving;
       assert.equal(saved.status(), 200);
-      assert.equal((await saved.json()).settings.message_count, 110 + locales.indexOf(locale), 'pending confirmation callback saves the intended values');
+      const savedSettings = (await saved.json()).settings;
+      assert.equal(savedSettings.message_count, 110 + locales.indexOf(locale), 'pending confirmation callback saves the intended values');
+      assert.equal(savedSettings.file_bytes, newFileMB * 1000000, 'localized MB controls save integer bytes');
+      assert.equal(savedSettings.temporary_upload_bytes, newBudgetMB * 1000000);
       await page.waitForFunction(value => document.querySelector('#setting-message_count').value === value && !document.querySelector('#confirm-dialog').open, String(110 + locales.indexOf(locale)));
       await switchInPlace(locale);
       await page.reload();
       await page.locator('#console').waitFor({ state: 'visible' });
+      assert.equal(await fileInput.inputValue(), String(newFileMB), 'MB file limit survives reload');
+      assert.equal(await budgetInput.inputValue(), String(newBudgetMB), 'MB upload budget survives reload');
+      assert.equal(await page.locator('#settings-form button[type=submit]').isDisabled(), true, 'localized size reload does not mark settings dirty');
       assert.equal(await page.locator('html').getAttribute('lang'), locale, 'explicit preference survives reload');
       await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${locale}: settings have no horizontal page overflow`);
@@ -190,7 +223,7 @@ async function main() {
     assert.equal(await blockedPage.locator('html').getAttribute('lang'), 'zh-Hant', 'switching works without storage');
     await blocked.close();
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ browser: await browser.version(), locales, localeFlows: ['translated login and auth errors', 'host validation and creation', 'agent and key creation', 'key preservation', 'unsaved settings and confirmation preservation', 'save and reload', 'mobile containment', 'logout persistence'], detectionCases: detectionCases.length, storageBlocked: 'passed', pageErrors: errors }));
+    console.log(JSON.stringify({ browser: await browser.version(), locales, localeFlows: ['translated login and auth errors', 'host validation and creation', 'agent and key creation', 'key preservation', 'unsaved settings and confirmation preservation', 'localized MB values, previous values and confirmations', 'MB persistence without byte conversion loss', 'save and reload', 'mobile containment', 'logout persistence'], detectionCases: detectionCases.length, storageBlocked: 'passed', pageErrors: errors }));
   } finally {
     if (browser) await browser.close();
     if (server.pid && server.exitCode === null) server.kill('SIGTERM');

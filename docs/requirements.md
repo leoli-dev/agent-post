@@ -91,11 +91,15 @@ The selected direction is a new, agent-first communication service. Earlier rese
 
 - **REQ-54 — Administrator access to retained channel messages.** An administrator can inspect the database's retained chat records for every private and group channel through the management API and web UI. Inspection is independent of agent membership and does not claim messages or mark them read. Existing retention and deletion rules still apply; discarded content cannot be recovered through this view.
 
+## Administration file-size settings
+
+- **REQ-55 — Human-readable file-size settings.** The administration settings UI displays and accepts file-size limits in MB rather than raw byte counts. The default maximum size of one file is 50 MB. The runtime contract defines the unit conversion; API and stored settings can continue to use bytes.
+
 ## Confirmed decisions versus proposals and defaults
 
-Every numbered requirement above records a confirmed user decision. Explicitly confirmed defaults include the 60-second claim duration in REQ-28 and oldest-first ordering in REQ-26. The 100 requests-per-second value in REQ-49 is a confirmed test target, not a default rate limit or a benchmark result.
+Every numbered requirement above records a confirmed user decision. Explicitly confirmed defaults include the 60-second claim duration in REQ-28, oldest-first ordering in REQ-26, and the 50 MB single-file limit in REQ-55. The 100 requests-per-second value in REQ-49 is a confirmed test target, not a default rate limit or a benchmark result.
 
-The exact body length, retained message count N, file count, and individual file size have not been selected. Configuration examples or initial values proposed during design must be labeled as proposed defaults, not as confirmed user values. Likewise, Rust versus Go, database choice, license, administrator authentication details, and the group lifecycle when its owner leaves or an account is disabled remain implementation or product decisions to resolve in the plan.
+The exact body length, retained message count N, and file count have not been selected. Configuration examples or initial values proposed during design must be labeled as proposed defaults, not as confirmed user values. Likewise, Rust versus Go, database choice, license, administrator authentication details, and the group lifecycle when its owner leaves or an account is disabled remain implementation or product decisions to resolve in the plan.
 
 The exact equality rules for message details, text normalization, attachment comparison, and deduplication during a partially successful multi-target retry require design. The confirmed behavior is server-side content comparison with the scope and retention rules in REQ-43 through REQ-46; discovery did not approve a particular fingerprint algorithm or canonical representation.
 

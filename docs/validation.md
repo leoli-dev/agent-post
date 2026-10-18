@@ -245,3 +245,26 @@ run is reported for this change.
 Translations were agent-assisted without native-speaker review. These local
 checks do not establish new platform, integration, performance, or release
 claims.
+
+## Administration file-size settings follow-up
+
+Local checks on **2026-10-17** exercised REQ-55's MB settings and the 50 MB
+single-file default. These checks do not replace the historical benchmark's
+25 MiB setting or establish new platform, performance, or release claims.
+
+- `go test ./internal/adminui`, `go vet ./...`, documentation checks through
+  REQ-55, and `git diff --check` passed. All four Node i18n tests passed.
+  Focused server tests passed for current upload limits, attachment cleanup and
+  restart, and strict newest-window retention before file eviction.
+- The English and seven-locale browser suites passed in Chromium
+  151.0.7922.34 with zero page JavaScript errors. Checks covered the 50 MB
+  default; saving 12.5 MB as 12,500,000 API bytes and reloading it; MB units in
+  previous-value hints and confirmations in all seven locales; and preservation
+  of 12,345,678 saved bytes as 12.345678 MB during an unrelated settings save.
+  Fractional bytes were rejected, one-byte and upper-bound values remained
+  exact, and the temporary upload budget still had to accommodate one file.
+- An independent conversion check passed 30,000 integer-byte round trips through
+  the MB helpers and rejected half-byte values near the lower and upper bounds.
+
+The HTTP settings contract and stored values remain integer bytes. Translations
+were agent-assisted without native-speaker review.
