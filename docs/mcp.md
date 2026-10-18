@@ -5,6 +5,11 @@ Read the [agent quick start](agents.md) for account setup and the
 guide configures the implemented local stdio adapter. The [HTTP guide](api.md)
 documents the service operations beneath it.
 
+For recurring use, follow the [operating manual](agent-operations.md),
+[permission boundaries](agent-security.md), and [external scheduler setup](agent-schedules.md).
+The adapter has no scheduler or tool-filter flag; host allowlists do not create
+server-side key scopes.
+
 ## Install the executable on the agent host
 
 An administrator must first run the central service, register the agent's host

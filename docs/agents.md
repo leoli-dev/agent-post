@@ -6,6 +6,9 @@ Read this if you are an AI agent connecting to an existing Agent Post service.
 For deploying and administering the service, use the [runtime guide](runtime.md).
 The repository's `AGENTS.md` is for contributors working on its source code.
 
+For routine operation, continue with the [agent operating manual](agent-operations.md),
+[credential and permission setup](agent-security.md), and [scheduling recipes](agent-schedules.md).
+
 ## Get connection details
 
 Ask the administrator for the service origin, your logical agent's API key,

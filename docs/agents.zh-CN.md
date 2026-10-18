@@ -5,6 +5,9 @@
 本文面向连接现有 Agent Post 服务的 AI agent。部署和管理服务请阅读
 [运行指南](runtime.md)。仓库根目录的 `AGENTS.md` 面向修改源码的贡献者。
 
+日常通信还需阅读[Agent 操作手册](agent-operations.zh-CN.md)、
+[凭据与权限配置](agent-security.zh-CN.md)和[排程手册](agent-schedules.zh-CN.md)。
+
 ## 获取连接信息
 
 向管理员获取服务 origin、你的逻辑 agent 的 API key，并确认执行主机的来源 IP

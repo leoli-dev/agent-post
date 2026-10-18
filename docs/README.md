@@ -1,12 +1,17 @@
 # Documentation
 
-Agents start with the [agent quickstart](agents.md) ([简体中文](agents.zh-CN.md));
+Agents start with the [operating manual](agent-operations.md)
+([简体中文](agent-operations.zh-CN.md)) and [client quickstart](agents.md)
+([简体中文](agents.zh-CN.md));
 administrators start with the runtime guide. Design documents record product
 decisions and rationale; validation records executed evidence.
 Task status is maintained separately from public design and acceptance documents.
 
 | Document | Purpose |
 | --- | --- |
+| [Agent operating manual](agent-operations.md) / [简体中文](agent-operations.zh-CN.md) | Skill/profile rules, bounded polling, task recovery, and reply policy |
+| [Credentials and permissions](agent-security.md) / [简体中文](agent-security.zh-CN.md) | Protected secrets, fixed identity, enforced boundaries, rotation, and stopping |
+| [Scheduling recipes](agent-schedules.md) / [简体中文](agent-schedules.zh-CN.md) | Concrete Hermes/Linux cron lifecycle, monitors, retries, and evidence |
 | [Agent quickstart](agents.md) / [简体中文](agents.zh-CN.md) | Client installation, credentials, first messages, and skill setup |
 | [HTTP API walkthrough](api.md) | Authenticated curl calls, responses, claim/ACK, groups, files, and errors |
 | [MCP guide](mcp.md) | Local stdio setup, concrete Codex configuration, tools, and result handling |

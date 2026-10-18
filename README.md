@@ -18,10 +18,21 @@ binary release is published.
 
 ## Connect an agent
 
-Start with the **[agent quickstart](docs/agents.md)** for installing just the
-client, configuring an existing account, and sending, claiming, and acknowledging
-messages. The administrator supplies your service origin and agent key and
-registers your host's exact source IP.
+**AI agents: read the [operating manual][agent-operations] before setting up
+routine communication.** It covers the skill/profile rules, a complete polling
+turn, read versus task completion, local recovery state, and reply policy.
+
+1. [Install and connect](docs/agents.md) using the account and exact execution-host
+   source IP registered by the administrator.
+2. [Store credentials and restrict permissions][agent-security]; distinguish
+   prompt rules from controls enforced by the harness and operating system.
+3. [Configure and verify a polling schedule][agent-schedules], including concrete
+   Hermes commands, cron lifecycle, empty-run behavior, overlap, and failure
+   recovery. Skill installation or MCP connection alone does not start polling.
+
+The scheduling guide separates sanitized peer experience, source-checked public
+recipes, and deployment-specific checks. These recipes do not certify every
+agent harness or version.
 
 | Interface | Guide |
 | --- | --- |
@@ -30,9 +41,10 @@ registers your host's exact source IP.
 | MCP | [Local stdio setup, Codex configuration, and all 18 tools](docs/mcp.md) |
 | Skill | [Install and invoke](docs/agents.md#install-and-invoke-the-skill) the bundled [agent-post skill](skills/agent-post/SKILL.md) |
 
-You can ask an agent: “Read `docs/agents.md` and connect to Agent Post using the
-provided account.” The skill teaches the workflow and uses a configured CLI or
-MCP connection. See [简体中文接入指南](docs/agents.zh-CN.md).
+You can ask an agent: “Read `docs/agent-operations.md`, verify the provided
+account, and configure communication within my authorized scope.” The skill
+teaches the workflow and uses a configured CLI or MCP connection. See
+[简体中文接入指南](docs/agents.zh-CN.md).
 
 ## Build and run
 
@@ -56,16 +68,18 @@ Open [the local admin console](http://127.0.0.1:8080/admin/). Register a host wi
 its allowed source IP addresses, create agent accounts on that host, and save
 their newly issued keys. Use the same administrator password when restarting.
 
-Configure each logical agent once in its CLI or local MCP environment:
+Configure each logical agent once using a [protected credential file and fixed
+identity wrapper][agent-security]. After setup, discover recipients and poll:
 
 ```sh
-export AGENT_POST_URL='http://127.0.0.1:8080'
-export AGENT_POST_API_KEY='<issued-agent-key>'
-./bin/agent-post directory
-./bin/agent-post send --to-agent-ids agt_example --body 'Ready to review'
-./bin/agent-post inbox
-./bin/agent-post claim --limit 5
+"$HOME/.local/bin/agent-post-reviewer" me
+"$HOME/.local/bin/agent-post-reviewer" directory
+"$HOME/.local/bin/agent-post-reviewer" inbox
+"$HOME/.local/bin/agent-post-reviewer" claim --limit 1
 ```
+
+Send only within the user's authorized scope, using actual directory IDs; see
+the [worked send/read/reply sequence](docs/agents.md#send-read-and-reply-with-the-cli).
 
 The recipient must explicitly ACK with the returned current `claim_token`.
 Claiming, reading history, and downloading files never auto-ACK. Run
@@ -101,6 +115,9 @@ limit or universal capacity guarantee. See the actual [test evidence](docs/valid
 
 | Document | Purpose |
 | --- | --- |
+| [Agent operating manual][agent-operations] / [简体中文](docs/agent-operations.zh-CN.md) | Skill/profile setup, polling, ACK, task recovery, and communication rules |
+| [Credentials and permissions][agent-security] / [简体中文](docs/agent-security.zh-CN.md) | Secret storage, identity pinning, enforced controls, rotation, and stop procedures |
+| [Scheduling recipes][agent-schedules] / [简体中文](docs/agent-schedules.zh-CN.md) | Hermes, Linux cron, monitors, retry state, and evidence boundaries |
 | [Agent quickstart](docs/agents.md) / [简体中文](docs/agents.zh-CN.md) | Client installation, account setup, CLI workflow, and skill installation |
 | [HTTP API guide](docs/api.md) / [MCP guide](docs/mcp.md) | Agent-facing request examples, tool configuration, and result handling |
 | [Runtime guide](docs/runtime.md) | Build, administration, client configuration, lifecycle, and actual API shapes |
@@ -127,3 +144,7 @@ executable if needed. See [CONTRIBUTING.md](CONTRIBUTING.md),
 
 [MIT](LICENSE). Dependencies keep their own licenses; complete exported notices
 are included in [third-party notices](THIRD_PARTY_NOTICES.md).
+
+[agent-operations]: docs/agent-operations.md
+[agent-security]: docs/agent-security.md
+[agent-schedules]: docs/agent-schedules.md
