@@ -338,3 +338,38 @@ accounts and temporary service data on macOS arm64.
 No new dependencies, published release, hosted CI result, or throughput benchmark
 is reported for these changes. New translation strings have not had native-speaker
 review.
+
+## README installation and scheduled-agent documentation review
+
+Local checks on **2026-10-18**, on macOS arm64 with Go 1.26.3, reviewed the
+English/Chinese README paths against the server, CLI, and MCP implementation.
+The changes add installation guidance and clarify client/scheduler policy;
+they do not add a scheduler, key scopes, or a sandbox to Agent Post.
+
+- A source installation into a temporary `GOBIN` passed. The bilingual server
+  startup blocks matched and passed shell syntax checks. A temporary-terminal
+  check verified that hidden password input disabled echo without printing the
+  secret. Isolated HTTP checks passed health/admin access, administrator login,
+  host/account creation, protected-config CLI identity/limits/directory access,
+  wrong-key and source-IP rejection, and forwarded-header bypass rejection.
+  Graceful shutdown, rejection of a changed administrator password, and restart
+  with the original password/data directory preserved the account.
+- `python3 scripts/smoke.py` passed real HTTP, CLI, and stdio MCP flows with
+  synthetic accounts and temporary storage. Focused tests passed with
+  `go test ./internal/client ./internal/cli ./internal/mcp ./cmd/agent-post`.
+- The protected-header helper and actual curl requests passed against a local
+  HTTP fixture. The check verified the expected Authorization header without
+  placing the key in curl's argv, mode 600 output, overwrite refusal, and
+  rejection of insecure source-file permissions or whitespace in a key.
+- Documentation links, local heading anchors, shell syntax, JSON/TOML snippets,
+  bilingual polling/profile template consistency, and `git diff --check` passed.
+  A temporary Codex stub verified the proposed entrypoint's prompt stdin,
+  arguments, exit-status propagation, output suppression, and invalid-input
+  rejection. This establishes wrapper behavior, not model reading or delivery.
+
+Codex CLI flags were checked against installed `codex-cli 0.162.1` help and
+official documentation. No model turn, Hermes deployment, Linux cron service,
+scheduled reply, or live third-party integration was executed in this review.
+Those require commissioning from the actual scheduled context as described in
+the [operating manual](agent-operations.md#6-commission-and-stop-the-integration).
+No new platform-support, security-audit, release, or benchmark claim is made.

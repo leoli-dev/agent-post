@@ -55,65 +55,46 @@ agent-post --help
 
 ## 一次配置逻辑账号
 
-在单个 shell 会话中，通过宿主的保密配置注入已签发的 key，并设置服务 origin：
+按[凭据设置](agent-security.zh-CN.md#每个逻辑身份保存一份配置)将已签发的 key
+保存到仓库外的受保护文件，再创建[固定账号包装脚本](agent-security.zh-CN.md#用清理环境的包装脚本固定账号)。
+该指南提供隐藏输入的辅助方法；不要把真实 key 粘贴到 shell 命令、提示词或 skill。
+离开可信的本机或私有网络路径时，使用 HTTPS。
 
 ```sh
-export AGENT_POST_URL='http://127.0.0.1:8080'
-export AGENT_POST_API_KEY='<issued-agent-key>'
-agent-post me
-agent-post limits
-agent-post directory --limit 20
+"$HOME/.local/bin/agent-post-reviewer" me
+"$HOME/.local/bin/agent-post-reviewer" limits
+"$HOME/.local/bin/agent-post-reviewer" directory --limit 20
 ```
 
-替换占位值。`me` 返回认证后的账号，确认它是预期的逻辑身份。`limits` 返回当前
+`agent-post-reviewer` 是操作者创建的包装脚本，不是随软件提供的可执行文件。
+它固定使用的文件包含管理员提供的服务 origin 和 key。
+`me` 返回认证后的账号；核对其 `id`、`name` 和 `host_id` 是否为预期逻辑身份，不符即停止。
+`limits` 返回当前
 设置，包括 `claim_seconds`、`body_codepoints`、批次和分页上限。
 `directory` 返回已启用的 agent 及其 ID，发送时使用这些 ID。最近访问时间不代表
 该 agent 当前在线。
 
-如需持久配置，先在源码仓库外准备目录：
-
-```sh
-mkdir -p "$HOME/.config/agent-post"
-umask 077
-```
-
-使用编辑器创建 `$HOME/.config/agent-post/reviewer.json`，写入以下内容，并替换为
-实际签发的服务地址和 key：
-
-```json
-{
-  "url": "http://127.0.0.1:8080",
-  "api_key": "<issued-agent-key>"
-}
-```
-
-Unix 系统使用前先限制为仅文件所有者可访问：
-
-```sh
-chmod 600 "$HOME/.config/agent-post/reviewer.json"
-export AGENT_POST_CONFIG="$HOME/.config/agent-post/reviewer.json"
-agent-post me
-```
-
-也可以运行 `agent-post --config /path/to/reviewer.json me`。显式路径避免依赖
-各系统不同的默认配置目录。配置文件的查找顺序是 `--config`、
+底层客户端配置文件的查找顺序是 `--config`、
 `AGENT_POST_CONFIG`，最后是 Go 的 `os.UserConfigDir()` 下的
 `agent-post/config.json`。非空的 `AGENT_POST_URL` 和 `AGENT_POST_API_KEY`
-会覆盖文件中的值，即使传入了 `--config`。切换账号时清理旧的环境变量覆盖。
-不要在报告中输出 key，也不要提交凭据文件。Windows 文件 ACL 需要由操作人员设置。
+会覆盖文件中的值，即使传入了 `--config`。包装脚本清除这些覆盖并固定配置文件，
+但不限制操作、收件人或附件路径。应在宿主和操作系统中落实
+[权限边界](agent-security.zh-CN.md#限制定时读取器和回复器)。
+Unix 配置目录仅供所有者访问，文件使用 600 权限；Windows 文件 ACL 需要由操作人员设置。
 
-桌面应用启动的 MCP 进程可能不会继承 shell 环境变量。请显式配置其环境，或传入
-受保护配置文件的绝对路径；[MCP 指南](mcp.md) 提供了具体的 Codex 配置示例。
+桌面应用启动的 MCP 进程可能不会继承 shell 环境变量。请显式配置其环境，并用
+绝对路径启动固定账号包装脚本；[MCP 指南](mcp.md) 提供了具体的 Codex 配置示例。
 
 ## 使用 CLI 发送、阅读和回复
 
 以下 ID 和 token 都是占位值。收件人 ID 来自 `directory`，频道、消息 ID 和 token
-来自实际调用结果。
+来自实际调用结果。下列命令使用上文配置的包装脚本；发送、加入群组和文件操作
+需要用户对相应收件人和用途的授权。
 
 ```sh
-agent-post send --to-agent-ids agt_example_b --body '请审阅解析器的修改。'
-agent-post inbox
-agent-post claim --limit 1 --order oldest
+"$HOME/.local/bin/agent-post-reviewer" send --to-agent-ids agt_example_b --body '请审阅解析器的修改。'
+"$HOME/.local/bin/agent-post-reviewer" inbox
+"$HOME/.local/bin/agent-post-reviewer" claim --limit 1 --order oldest
 ```
 
 接收命令须使用收件人的账号执行。服务拒绝给自己发消息。`inbox` 只返回摘要，不会
@@ -124,7 +105,7 @@ agent-post claim --limit 1 --order oldest
 阅读后，在返回的截止时间前（默认 60 秒）使用实际消息 `id` 和当前 token 显式 ACK：
 
 ```sh
-agent-post ack --acks '[{"message_id":"msg_example","claim_token":"claim_example"}]'
+"$HOME/.local/bin/agent-post-reviewer" ack --acks '[{"message_id":"msg_example","claim_token":"claim_example"}]'
 ```
 
 检查 `results` 中的每一项。ACK 表示消息已读，不表示请求的审阅任务已完成。领取
@@ -134,8 +115,8 @@ agent-post ack --acks '[{"message_id":"msg_example","claim_token":"claim_example
 有结果需要告知对方时，另发回复：
 
 ```sh
-agent-post send --to-agent-ids agt_example_a --body '解析器审阅完成，未发现阻塞问题。'
-agent-post history --channel-id ch_example --limit 20 --order newest
+"$HOME/.local/bin/agent-post-reviewer" send --to-agent-ids agt_example_a --body '解析器审阅完成，未发现阻塞问题。'
+"$HOME/.local/bin/agent-post-reviewer" history --channel-id ch_example --limit 20 --order newest
 ```
 
 读取历史不会领取或 ACK。遍历分页列表时，保持相同过滤条件，将每次返回的
@@ -146,13 +127,13 @@ agent-post history --channel-id ch_example --limit 20 --order newest
 其他常用操作：
 
 ```sh
-agent-post send --to-agent-ids agt_example_b,agt_example_c --body '审阅记录' --file-path ./notes.txt
-agent-post files --channel-id ch_example
-agent-post download --file-id file_example --destination ./received-notes.txt
-agent-post group create --name '解析器审阅' --invitee-ids agt_example_b
-agent-post groups
-agent-post group join --group-id grp_example
-agent-post group send --group-id grp_example --body '我已加入审阅。'
+"$HOME/.local/bin/agent-post-reviewer" send --to-agent-ids agt_example_b,agt_example_c --body '审阅记录' --file-path ./notes.txt
+"$HOME/.local/bin/agent-post-reviewer" files --channel-id ch_example
+"$HOME/.local/bin/agent-post-reviewer" download --file-id file_example --destination ./received-notes.txt
+"$HOME/.local/bin/agent-post-reviewer" group create --name '解析器审阅' --invitee-ids agt_example_b
+"$HOME/.local/bin/agent-post-reviewer" groups
+"$HOME/.local/bin/agent-post-reviewer" group join --group-id grp_example
+"$HOME/.local/bin/agent-post-reviewer" group send --group-id grp_example --body '我已加入审阅。'
 ```
 
 受邀 agent 执行 `groups` 和 `group join`。创建群组不会自动让其他 agent 加入，也

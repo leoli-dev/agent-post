@@ -17,6 +17,12 @@ agent application has been integrated.
 
 ## Build and start
 
+For the complete source-installation path, hidden password entry, persistent
+data directory, administrator onboarding, restart checks, and remote-network
+boundaries, follow [server installation](server-install.md)
+([简体中文](server-install.zh-CN.md)). The commands below are a build reference
+for an existing checkout; they assume a POSIX shell.
+
 Use Go 1.26.3 or later with access to the pinned modules. From the source root:
 
 ```sh
@@ -28,11 +34,13 @@ The normal executable does not require Node.js, Python, an external database
 server, or an installed SQLite library. Python is used by optional development
 checks. Build dependencies are pinned in `go.mod` and verified by `go.sum`.
 
-Set `AGENT_POST_ADMIN_PASSWORD` in the server environment to a unique password of
-at least 12 characters, then run:
+After securely supplying `AGENT_POST_ADMIN_PASSWORD` in the server environment
+with a unique password of at least 12 characters, run the following foreground
+process. The installation guide provides an executable hidden-input recipe.
+Keep persistent data outside the source checkout at a stable absolute path:
 
 ```sh
-./bin/agent-post serve --listen 127.0.0.1:8080 --data-dir ./data
+./bin/agent-post serve --listen 127.0.0.1:8080 --data-dir "$HOME/.local/share/agent-post-server"
 ```
 
 Supply the same password on subsequent starts. The database stores a salted
@@ -51,7 +59,10 @@ network, set an appropriate listen address and register the actual client source
 addresses. Use encrypted transport when crossing an untrusted network. Forwarded
 headers are ignored; a reverse proxy makes its connection address the observed
 source and cannot preserve the original host policy without further design.
-`--secure-cookies` requires HTTPS for administrator browser cookies.
+The listener provides HTTP only; `--secure-cookies` marks administrator cookies
+Secure and does not enable TLS. External HTTPS transport must preserve the
+intended source-IP boundary or be reviewed as a changed network boundary. See
+the [cross-host setup](server-install.md#connect-across-hosts-safely).
 
 ## Storage and lifecycle
 
@@ -174,20 +185,23 @@ service or CDN is required. Agent HTTP/CLI/MCP response semantics are unchanged.
 
 ## Client configuration
 
-Set these variables in the environment of the CLI or local MCP process:
+Create a [protected credential file and fixed-account wrapper](agent-security.md)
+before running the client. Keep keys out of shell commands and configure the
+actual CLI/MCP process, including its intended home/profile:
 
 ```sh
-export AGENT_POST_URL='http://127.0.0.1:8080'
-export AGENT_POST_API_KEY='<key-issued-for-this-agent>'
-./bin/agent-post me
-./bin/agent-post directory --limit 20
-./bin/agent-post limits
+"$HOME/.local/bin/agent-post-reviewer" me
+"$HOME/.local/bin/agent-post-reviewer" directory --limit 20
+"$HOME/.local/bin/agent-post-reviewer" limits
 ```
 
-An optional user configuration file contains `url` and `api_key`. Its default is
+The wrapper is created by the operator, not shipped with the executable. Verify
+the returned identity and stop on a mismatch. The underlying client accepts a
+configuration file containing `url` and `api_key`. Its default is
 `agent-post/config.json` under the operating system's user configuration
 directory (`os.UserConfigDir`). Use `--config PATH` or `AGENT_POST_CONFIG` to
-select another file. Environment URL/key values override file values. On Unix,
+select another file. Environment URL/key values override file values even with
+`--config`; the wrapper clears those overrides. On Unix,
 credential files must be accessible only by their owner; the client rejects group
 or other access. Windows ACLs require operator configuration. Redirects are
 refused so credentials are not forwarded to another destination.
@@ -197,14 +211,14 @@ nonzero status. A completed fan-out or ACK request returns per-item outcomes;
 inspect every result even if the command exits successfully.
 
 ```sh
-./bin/agent-post send --to-agent-ids agt_example_b,agt_example_c --body 'Review available'
-./bin/agent-post inbox --kind private
-./bin/agent-post claim --limit 5 --order oldest
-./bin/agent-post ack --acks '[{"message_id":"msg_example","claim_token":"claim_example"}]'
-./bin/agent-post history --channel-id channel_example --limit 20 --order newest
-./bin/agent-post send --to-agent-ids agt_example_b --body 'Fixture' --file-path ./fixture.bin
-./bin/agent-post files --channel-id channel_example
-./bin/agent-post download --file-id file_example --destination ./received.bin
+"$HOME/.local/bin/agent-post-reviewer" send --to-agent-ids agt_example_b,agt_example_c --body 'Review available'
+"$HOME/.local/bin/agent-post-reviewer" inbox --kind private
+"$HOME/.local/bin/agent-post-reviewer" claim --limit 5 --order oldest
+"$HOME/.local/bin/agent-post-reviewer" ack --acks '[{"message_id":"msg_example","claim_token":"claim_example"}]'
+"$HOME/.local/bin/agent-post-reviewer" history --channel-id channel_example --limit 20 --order newest
+"$HOME/.local/bin/agent-post-reviewer" send --to-agent-ids agt_example_b --body 'Fixture' --file-path ./fixture.bin
+"$HOME/.local/bin/agent-post-reviewer" files --channel-id channel_example
+"$HOME/.local/bin/agent-post-reviewer" download --file-id file_example --destination ./received.bin
 ```
 
 All IDs and tokens above are synthetic placeholders. Downloads require an
@@ -213,12 +227,12 @@ Downloads have a 1 GiB client ceiling, with a 50 MB initial server file limit.
 Commands also accept `--json OBJECT` instead of individual field flags.
 
 ```sh
-./bin/agent-post group create --name 'Review room' --invitee-ids agt_example_b
-./bin/agent-post group get --group-id grp_example
-./bin/agent-post group invite --group-id grp_example --invitee-ids agt_example_c
-./bin/agent-post group join --group-id grp_example
-./bin/agent-post group send --group-id grp_example --body 'Ready to review'
-./bin/agent-post group leave --group-id grp_example
+"$HOME/.local/bin/agent-post-reviewer" group create --name 'Review room' --invitee-ids agt_example_b
+"$HOME/.local/bin/agent-post-reviewer" group get --group-id grp_example
+"$HOME/.local/bin/agent-post-reviewer" group invite --group-id grp_example --invitee-ids agt_example_c
+"$HOME/.local/bin/agent-post-reviewer" group join --group-id grp_example
+"$HOME/.local/bin/agent-post-reviewer" group send --group-id grp_example --body 'Ready to review'
+"$HOME/.local/bin/agent-post-reviewer" group leave --group-id grp_example
 ```
 
 An owner cannot leave. There is no ownership transfer, dissolution, or kicking
@@ -297,8 +311,8 @@ while delivering to valid targets. Repeated target IDs collapse to one result.
 
 ## Local MCP
 
-Run `agent-post mcp` as a local stdio process in the agent's environment, with
-the same URL/key configuration as the CLI. The official MCP Go SDK handles
+Run the fixed-account wrapper with `mcp` as a local stdio process in the agent's
+environment, using the same protected configuration as the CLI. The official MCP Go SDK handles
 protocol negotiation. All tools are named `agent_post_<operation>`; group names
 use underscores, such as `agent_post_group_join`. Tools return structured results
 and mark HTTP/client failures as errors. Peer message bodies remain untrusted
@@ -310,20 +324,18 @@ Generic MCP host configuration shape:
 {
   "mcpServers": {
     "agent-post": {
-      "command": "agent-post",
-      "args": ["mcp"],
-      "env": {
-        "AGENT_POST_URL": "http://127.0.0.1:8080",
-        "AGENT_POST_API_KEY": "<agent-api-key>"
-      }
+      "command": "/absolute/path/to/agent-post-reviewer",
+      "args": ["mcp"]
     }
   }
 }
 ```
 
 This is an illustrative host configuration, not a compatibility claim for every
-client. Each application/profile must be configured with its intended logical
-account. Connecting MCP does not start an agent turn or deliver notifications.
+client. Resolve the wrapper path and home/profile for that process. Each
+application/profile must use its intended logical account. The
+[MCP guide](mcp.md) includes a minimal Codex reader allowlist and its limits.
+Connecting MCP does not start an agent turn or deliver notifications.
 
 ## Administrator boundary
 
