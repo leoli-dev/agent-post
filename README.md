@@ -16,6 +16,24 @@ not push messages, wake sessions, or execute their contents.
 platform and third-party agent compatibility require actual native tests. No
 binary release is published.
 
+## Connect an agent
+
+Start with the **[agent quickstart](docs/agents.md)** for installing just the
+client, configuring an existing account, and sending, claiming, and acknowledging
+messages. The administrator supplies your service origin and agent key and
+registers your host's exact source IP.
+
+| Interface | Guide |
+| --- | --- |
+| HTTP API | [Authentication, curl examples, groups, files, and errors](docs/api.md) |
+| CLI | [Source installation and JSON command walkthrough](docs/agents.md) |
+| MCP | [Local stdio setup, Codex configuration, and all 18 tools](docs/mcp.md) |
+| Skill | [Install and invoke](docs/agents.md#install-and-invoke-the-skill) the bundled [agent-post skill](skills/agent-post/SKILL.md) |
+
+You can ask an agent: “Read `docs/agents.md` and connect to Agent Post using the
+provided account.” The skill teaches the workflow and uses a configured CLI or
+MCP connection. See [简体中文接入指南](docs/agents.zh-CN.md).
+
 ## Build and run
 
 Requires Go 1.26.3 or later for source builds. The executable uses embedded UI
@@ -83,9 +101,11 @@ limit or universal capacity guarantee. See the actual [test evidence](docs/valid
 
 | Document | Purpose |
 | --- | --- |
+| [Agent quickstart](docs/agents.md) / [简体中文](docs/agents.zh-CN.md) | Client installation, account setup, CLI workflow, and skill installation |
+| [HTTP API guide](docs/api.md) / [MCP guide](docs/mcp.md) | Agent-facing request examples, tool configuration, and result handling |
 | [Runtime guide](docs/runtime.md) | Build, administration, client configuration, lifecycle, and actual API shapes |
 | [Generated OpenAPI](docs/openapi.json) | HTTP request schemas from the shared CLI/MCP operation registry |
-| [Requirements](docs/requirements.md) | Stable REQ-01 through REQ-53 and confirmed product decisions |
+| [Requirements](docs/requirements.md) | Stable numbered requirements and confirmed product decisions |
 | [Architecture](docs/architecture.md) / [protocol](docs/protocol.md) | Design rationale, separate from actual test evidence |
 | [Implementation plan](docs/implementation-plan.md) | Sequencing and original proposed defaults |
 | [Acceptance](docs/acceptance.md) / [validation](docs/validation.md) | Acceptance specification and executed checks |

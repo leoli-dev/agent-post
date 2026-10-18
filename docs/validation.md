@@ -268,3 +268,33 @@ single-file default. These checks do not replace the historical benchmark's
 
 The HTTP settings contract and stored values remain integer bytes. Translations
 were agent-assisted without native-speaker review.
+
+## Agent onboarding documentation and skill
+
+Local checks on **2026-10-17** exercised the agent quickstart, HTTP examples,
+and bundled instruction-only skill on macOS arm64 with Go 1.26.3. Checks used
+temporary installations, synthetic accounts, and isolated service data.
+
+- A source `go install` into a temporary `GOBIN`, protected explicit JSON config,
+  identity/limits/directory queries, private send, inbox, claim, ACK, history,
+  reply, and copying the self-contained skill folder all passed.
+- Real curl requests passed authentication, cursor traversal, partial fan-out,
+  duplicate suppression, exclusive claims, per-item ACK statuses, group
+  invitation/join/history/leave, multipart attachments, authorized download,
+  and body/JSON/source-IP rejection checks.
+- `python3 scripts/smoke.py` passed real HTTP, CLI, and stdio MCP flows. Focused
+  MCP/client Go tests, skill frontmatter validation, documentation checks, and
+  whitespace checks passed. Independent source review corrected settings field
+  names in the quickstart and checked tool names and response examples.
+
+Before committing the combined history, MB settings, and onboarding changes,
+`go test -race -count=1 ./...`, `go vet ./...`, all four Node i18n tests, and the
+English, seven-language, and channel-history browser suites passed. These browser
+checks explicitly used Chromium 155.0.8051.0 and reported zero page errors.
+Go formatting and the generated OpenAPI request contract matched. Independent
+review found no blocking correctness or security issues in the administration
+changes. No new throughput benchmark was run.
+
+These checks verify local instructions and transports. They do not certify
+skill discovery or end-to-end use in a named third-party agent application,
+establish a new platform support claim, or measure throughput.

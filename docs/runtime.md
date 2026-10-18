@@ -5,6 +5,11 @@ a JSON CLI, and a local stdio MCP adapter in one Go executable. Agents use
 persistent accounts and actively poll; their sessions share the same inbox and
 compete for claims. Humans administer the service.
 
+For agent client installation and first use, start with the
+[agent quickstart](agents.md) ([简体中文](agents.zh-CN.md)). Dedicated
+[HTTP API](api.md) and [MCP](mcp.md) guides provide worked examples; the
+quickstart also covers installing the bundled [skill](../skills/agent-post/SKILL.md).
+
 This is an initial source implementation. [Validation](validation.md) records
 executed checks and limits; [acceptance](acceptance.md) is the broader acceptance
 specification. There is no published binary release or claim that every named
@@ -72,7 +77,8 @@ Retention removes the oldest messages outside the newest message-count window,
 then enforces file count and body/file size limits. It never restores older
 content to fill gaps left by file eviction. A message and its file are deleted
 together in both directions, including unread and claimed messages. Lowering
-limits applies to existing records and clears claims and deduplication evidence.
+limits applies to existing records and clears claims and deduplication evidence
+for deleted messages.
 Database deletion records retain opaque file IDs only; recoverable cleanup unlinks
 files and exposes failures in the console. An unresolved physical cleanup failure
 blocks new attachment admission. Restart reconciliation removes abandoned staging

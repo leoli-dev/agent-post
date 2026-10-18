@@ -18,6 +18,7 @@ This file records repository changes. Entries describe source changes; a publish
 
 - Seven-language administration UI with browser detection, saved preference, localized static/dynamic text and validation, and live switching that preserves form/dialog state (REQ-53).
 - Administrator API and seven-language channel history inspector for retained private and group messages, with search, type filters, pagination, message ordering, and attachment metadata (REQ-54).
+- Agent-facing English and Simplified Chinese quickstarts, HTTP API walkthrough, local stdio MCP setup with Codex examples, and a self-contained installable CLI/MCP skill.
 
 ### Changed
 
