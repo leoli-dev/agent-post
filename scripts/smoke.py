@@ -220,7 +220,7 @@ class Fixture:
         require(result.returncode == expected, "CLI exit status for " + args[0])
         return json.loads(result.stdout)
 
-    def mcp_smoke(self):
+    def mcp_smoke(self, parent_id):
         env = {k: v for k, v in os.environ.items() if not k.startswith("AGENT_POST_")}
         env.update(AGENT_POST_URL=self.base, AGENT_POST_API_KEY=self.keys["alice"],
                    AGENT_POST_CONFIG=str(self.folder / "client.json"))
@@ -253,12 +253,17 @@ class Fixture:
             receive(1)
             send({"jsonrpc": "2.0", "method": "notifications/initialized"})
             send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
-            require(len(receive(2)["tools"]) == 18, "MCP operation inventory")
+            require(len(receive(2)["tools"]) == 19, "MCP operation inventory")
             send({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "agent_post_me", "arguments": {}}})
             result = receive(3)
             require(not result.get("isError", False), "MCP me result")
             require(result["structuredContent"]["id"] == self.ids["alice"], "MCP logical identity parity")
-            self.checks.append("real stdio MCP initialize/list/tools-call identity parity")
+            send({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+                "name": "agent_post_reply", "arguments": {"message_id": parent_id, "body": "mcp-reply"}}})
+            reply = receive(4)
+            require(not reply.get("isError", False) and reply["structuredContent"]["status"] == "sent"
+                    and "results" not in reply["structuredContent"], "MCP single-object reply")
+            self.checks.append("real stdio MCP initialize/list/identity and single-object reply")
         finally:
             process.stdin.close()
             try:
@@ -281,8 +286,32 @@ class Fixture:
                  headers={"X-Forwarded-For": "192.0.2.10", "Forwarded": "for=192.0.2.10"})
         self.request("GET", "/admin/api/state", self.keys["alice"], expected=401)
         self.checks.append("API key plus exact source IP, forwarded-header spoof denial, admin isolation")
-        initial_settings = self.api("alice", "GET", "/limits")["settings"]
+        limits = self.api("alice", "GET", "/limits")
+        initial_settings = limits["settings"]
         require(initial_settings["claim_seconds"] == 60, "confirmed default claim duration")
+        require(limits["features"] == {"message_context_v1": True, "route_reply_v1": True,
+                                      "ack_read_v1": True}, "implemented feature manifest")
+
+        self.agent("route-recipient", host)
+        route = self.send("route-parent", ["route-recipient"])[0]
+        route_parent, route_channel = route["message_id"], route["channel_id"]
+        route_claim = self.api("route-recipient", "POST", "/inbox/claim", {"limit": 1})["messages"][0]
+        require(route_claim["id"] == route_parent
+                and route_claim["context"]["channel"] == {"id": route_channel, "kind": "private",
+                                                           "peer_agent_id": self.ids["alice"]}
+                and route_claim["context"]["sender"] == {"id": self.ids["alice"], "name": "alice"},
+                "claim context")
+        route_ack = self.api("route-recipient", "POST", "/inbox/ack", {"acks": [
+            {"message_id": route_parent, "claim_token": route_claim["claim_token"]}]})["results"][0]
+        require(route_ack["status"] == "read" and route_ack["read"] is True, "ACK read observation")
+        route_reply = self.api("route-recipient", "POST", "/messages/" + route_parent + "/reply", {"body": "http-reply"})
+        require(route_reply["status"] == "sent" and route_reply["channel_id"] == route_channel
+                and set(route_reply) == {"status", "message_id", "channel_id"}, "HTTP single-object reply")
+        cli_reply = self.cli("route-recipient", "reply", "--message-id", route_parent, "--body", "cli-reply")
+        require(cli_reply["status"] == "sent" and cli_reply["channel_id"] == route_channel
+                and "results" not in cli_reply, "CLI single-object reply")
+        self.mcp_smoke(route_parent)
+        self.checks.append("HTTP claim context/features/read and HTTP/CLI/MCP route replies")
 
         results = self.send("fanout-original", ["bob", "carol", "alice", "agt_missing"])
         require([r["status"] for r in results] == ["sent", "sent", "rejected", "rejected"], "partial fanout outcomes")
@@ -370,7 +399,6 @@ class Fixture:
         require(self.api("bob", "GET", "/inbox")["unread"] == before, "CLI never auto ACK")
         cli_ack = self.cli("bob", "ack", "--acks", json.dumps([{"message_id": cli_claim["id"], "claim_token": cli_claim["claim_token"]}]))
         require(cli_ack["results"][0]["status"] == "read", "CLI ACK parity")
-        self.mcp_smoke()
         self.stop()
         self.start()
         require(any(m["id"] == durable["message_id"] for m in self.history("bob", bob_channel)), "durable history after restart")

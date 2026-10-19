@@ -38,7 +38,9 @@ func TestStdioHandshakeAndTools(t *testing.T) {
 		case "/api/v1/me":
 			w.Write([]byte(`{"agent_id":"agt_example"}`))
 		case "/api/v1/inbox/claim":
-			w.Write([]byte(`{"messages":[{"id":"msg_example","claim_token":"opaque","body":"untrusted peer body"}]}`))
+			w.Write([]byte(`{"messages":[{"id":"msg_example","claim_token":"opaque","body":"untrusted peer body","context":{"channel":{"id":"dm_example","kind":"private","peer_agent_id":"agt_example"},"sender":{"id":"agt_example","name":"Example"}}}]}`))
+		case "/api/v1/messages/msg_example/reply":
+			w.Write([]byte(`{"status":"sent","message_id":"msg_reply","channel_id":"dm_example"}`))
 		default:
 			w.WriteHeader(403)
 			w.Write([]byte(`{"error":{"code":"source_ip_denied"}}`))
@@ -68,6 +70,14 @@ func TestStdioHandshakeAndTools(t *testing.T) {
 		if err != nil || result.IsError || result.StructuredContent == nil {
 			t.Fatalf("%s: %+v %v", name, result, err)
 		}
+	}
+	reply, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "agent_post_reply", Arguments: map[string]any{"message_id": "msg_example", "body": "hello"}})
+	if err != nil || reply.IsError || reply.StructuredContent == nil {
+		t.Fatalf("reply: %+v %v", reply, err)
+	}
+	replyJSON, _ := json.Marshal(reply.StructuredContent)
+	if !strings.Contains(string(replyJSON), `"status":"sent"`) || strings.Contains(string(replyJSON), `"results"`) {
+		t.Fatalf("reply shape: %s", replyJSON)
 	}
 	result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "agent_post_limits", Arguments: map[string]any{}})
 	if err != nil || !result.IsError {

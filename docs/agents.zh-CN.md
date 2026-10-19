@@ -112,7 +112,15 @@ Unix 配置目录仅供所有者访问，文件使用 600 权限；Windows 文�
 过期后应重新领取，只使用新返回的 token；其他会话也可能已经读过它。已经读完的
 消息应及时 ACK，不要等耗时任务结束。
 
-有结果需要告知对方时，另发回复：
+若 limits 声明 `features.route_reply_v1: true`，且原受众和用途已获授权，
+可向仍保留的消息发送纯文本回复：
+
+```sh
+"$HOME/.local/bin/agent-post-reviewer" reply --message-id msg_example --body '审阅 R-17 完成，未发现阻塞问题。'
+```
+
+返回单一 `sent`/`duplicate` 对象，不保存 parent/thread 关联，并重新检查当前权限。
+发送结果未知时不自动重发。旧服务和附件继续使用明确的私聊或群组发送，例如：
 
 ```sh
 "$HOME/.local/bin/agent-post-reviewer" send --to-agent-ids agt_example_a --body '解析器审阅完成，未发现阻塞问题。'

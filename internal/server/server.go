@@ -194,7 +194,7 @@ func fail(w http.ResponseWriter, e error) {
 		status = 401
 	case "source_ip_denied", "forbidden", "not_group_member", "not_invited", "csrf_required":
 		status = 403
-	case "not_found", "message_purged":
+	case "not_found", "message_purged", "message_unavailable":
 		status = 404
 	case "cleanup_unavailable", "upload_capacity":
 		status = 503
@@ -225,7 +225,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	// Read request bodies before entering the state critical section. Uploads first
 	// authenticate and reserve a bounded amount of staging capacity.
 	if r.Body != nil && r.Method != "GET" {
-		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") && legacyUploadRoute(r) {
 			s.mu.Lock()
 			_, authErr := s.authenticate(r)
 			settings := s.st.Settings
@@ -265,7 +265,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 				defer s.releasePrepared(u)
 			}
 			r = r.WithContext(context.WithValue(r.Context(), preparedKey{}, preparedSend{in, u}))
-		} else {
+		} else if !(strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") && replyRoute(r)) {
 			b, e := ioReadBounded(r.Body, maxJSONBytes)
 			if e != nil {
 				fail(w, e)
@@ -394,6 +394,22 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		w.Write(append(b, '\n'))
 	}
+}
+
+func legacyUploadRoute(r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return false
+	}
+	if r.URL.Path == "/api/v1/messages/direct" {
+		return true
+	}
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/"), "/")
+	return strings.HasPrefix(r.URL.Path, "/api/v1/") && len(parts) == 3 && parts[0] == "groups" && parts[1] != "" && parts[2] == "messages"
+}
+
+func replyRoute(r *http.Request) bool {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/"), "/")
+	return r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v1/") && len(parts) == 3 && parts[0] == "messages" && parts[2] == "reply"
 }
 func (s *Server) authenticate(r *http.Request) (*storedAgent, error) {
 	if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
