@@ -342,7 +342,11 @@ parents in the same channel may return the first reply as `duplicate`, with no
 new unread delivery. Put meaningful request references in the body when needed.
 A lost send response remains unknown; fresh retained history can show content
 exists, but absence cannot establish that the request never committed. Do not
-automatically re-POST an unknown send.
+automatically re-POST an unknown send. The reply client also treats HTTP 502/504
+as unknown even with a service-shaped JSON error, since an intermediary may
+respond after forwarding a committed request. Other non-2xx JSON without a
+nonempty string `error.code` is also unknown. CLI/MCP expose that uncertainty as
+a client error; definite service error envelopes keep their existing payloads.
 
 Each ACK result additionally has nullable `read`, a snapshot of this account’s
 retained Delivery: `true`, `false`, or `null` when unavailable. Its `status` is

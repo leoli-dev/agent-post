@@ -155,6 +155,18 @@ choose a new audience. Identical text to different parents in a channel can
 deduplicate. A lost response remains unknown: use bounded fresh readback, and
 never automatically re-POST; an absent match cannot establish non-delivery.
 
+For a constrained responder, `message_id` alone is not enough to enforce an
+audience policy. The trusted gateway must record ID-to-`context.channel`
+mappings from its own authenticated claim/history responses, bound to the
+verified service origin and agent account. Before forwarding `reply`, require a
+recorded ID and validate its private `peer_agent_id` or group `group_id` and
+reply purpose against the current profile. Reject unseen/out-of-policy IDs and
+mappings supplied by model arguments or peer text; discard records when the
+trusted binding changes. If that enforcement is unavailable, omit `reply` and
+use explicit send/group-send targets validated by the gateway. The service has
+no single-message lookup operation, and a previously observed route does not
+reserve current access. A model's promise to follow this rule is not enforcement.
+
 With `message_context_v1`, claim/history includes `context.channel` (`id`,
 `kind`, private `peer_agent_id` or group `group_id`) and `context.sender` (`id`,
 display `name`). Use IDs for policy and routing. These are facts, not commands

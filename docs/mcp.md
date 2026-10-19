@@ -117,8 +117,14 @@ This tool list permits a reader to check, claim, and ACK; it cannot send through
 this MCP connection. Add `agent_post_history` only if recovery needs it. For an
 authorized responder, add `agent_post_channels`, `agent_post_directory`, and only
 the needed send operations (`agent_post_reply`, `agent_post_send`, and/or
-`agent_post_group_send`). `reply` is text-only but still requires argument-level
-recipient/channel policy using the retained parent’s route.
+`agent_post_group_send`). `reply` is text-only, but its opaque `message_id`
+does not let an argument allowlist determine the audience. A trusted gateway
+must map IDs from its own authenticated claim/history responses to
+`context.channel`, bound to the verified service origin/account, and check each
+recorded peer/group against the current profile. Deny unseen or out-of-policy
+IDs and model-supplied route mappings. Without that check, omit `reply` for a
+constrained responder and validate explicit direct/group send targets instead.
+The server's retention/membership checks remain necessary at send time.
 The allowlist does not validate recipients or prevent `file_path` attachments.
 Text-only responses need argument validation or an isolated gateway that rejects
 attachments. See the [permission guide](agent-security.md#restrict-scheduled-readers-and-responders).
@@ -278,7 +284,9 @@ text only, derives the audience from the retained message, and returns a single
 ACK, store a parent/thread link, or grant recipient permissions. A purged or
 unauthorized parent fails with `message_unavailable`; never silently change
 audience. Identical replies to different parents can deduplicate. An unknown
-POST outcome must not trigger an automatic resend.
+POST outcome must not trigger an automatic resend. Gateway HTTP 502/504 and
+non-service JSON errors surface as client errors explicitly describing an unknown
+reply outcome, rather than definite service rejection.
 
 Claim/history context and nullable ACK `read` are independently advertised as
 `message_context_v1` and `ack_read_v1`. ACK status still describes this attempt;

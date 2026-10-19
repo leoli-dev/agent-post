@@ -206,7 +206,15 @@ func (c *Client) Execute(ctx context.Context, op Operation, args map[string]any)
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
-			return raw, err
+			// A gateway can return a JSON error after the upstream committed the
+			// reply. Only service-shaped errors at other statuses are definite.
+			if apiErr.Status != http.StatusBadGateway && apiErr.Status != http.StatusGatewayTimeout &&
+				isServiceErrorEnvelope(raw) {
+				return raw, err
+			}
+			// Drop raw payload and APIError typing so callers cannot mistake a
+			// gateway response for a definitive rejection by the service.
+			return nil, fmt.Errorf("reply outcome is unknown: HTTP %d", apiErr.Status)
 		}
 		return nil, fmt.Errorf("reply outcome is unknown: %w", err)
 	}
@@ -219,4 +227,13 @@ func (c *Client) Execute(ctx context.Context, op Operation, args map[string]any)
 		return nil, errors.New("invalid reply result; send outcome is unknown")
 	}
 	return raw, nil
+}
+
+func isServiceErrorEnvelope(raw json.RawMessage) bool {
+	var envelope map[string]json.RawMessage
+	var details map[string]json.RawMessage
+	var code *string
+	return json.Unmarshal(raw, &envelope) == nil &&
+		json.Unmarshal(envelope["error"], &details) == nil &&
+		json.Unmarshal(details["code"], &code) == nil && code != nil && *code != ""
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,6 +31,8 @@ func TestMCPHelper(t *testing.T) {
 	os.Exit(0)
 }
 func TestStdioHandshakeAndTools(t *testing.T) {
+	var gatewayCalls atomic.Int32
+	var deniedCalls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Error("missing key")
@@ -41,6 +44,14 @@ func TestStdioHandshakeAndTools(t *testing.T) {
 			w.Write([]byte(`{"messages":[{"id":"msg_example","claim_token":"opaque","body":"untrusted peer body","context":{"channel":{"id":"dm_example","kind":"private","peer_agent_id":"agt_example"},"sender":{"id":"agt_example","name":"Example"}}}]}`))
 		case "/api/v1/messages/msg_example/reply":
 			w.Write([]byte(`{"status":"sent","message_id":"msg_reply","channel_id":"dm_example"}`))
+		case "/api/v1/messages/msg_gateway/reply":
+			gatewayCalls.Add(1)
+			w.WriteHeader(502)
+			w.Write([]byte(`{"error":{"code":"storage_unavailable"}}`))
+		case "/api/v1/messages/msg_denied/reply":
+			deniedCalls.Add(1)
+			w.WriteHeader(403)
+			w.Write([]byte(`{"error":{"code":"source_ip_denied"}}`))
 		default:
 			w.WriteHeader(403)
 			w.Write([]byte(`{"error":{"code":"source_ip_denied"}}`))
@@ -78,6 +89,27 @@ func TestStdioHandshakeAndTools(t *testing.T) {
 	replyJSON, _ := json.Marshal(reply.StructuredContent)
 	if !strings.Contains(string(replyJSON), `"status":"sent"`) || strings.Contains(string(replyJSON), `"results"`) {
 		t.Fatalf("reply shape: %s", replyJSON)
+	}
+	for _, tc := range []struct {
+		id, code string
+		unknown  bool
+	}{
+		{"msg_gateway", "client_error", true}, {"msg_denied", "source_ip_denied", false},
+	} {
+		result, callErr := session.CallTool(ctx, &sdk.CallToolParams{Name: "agent_post_reply", Arguments: map[string]any{"message_id": tc.id, "body": "hello"}})
+		if callErr != nil || !result.IsError || result.StructuredContent == nil {
+			t.Fatalf("%s result: %+v %v", tc.id, result, callErr)
+		}
+		data, _ := json.Marshal(result.StructuredContent)
+		var envelope struct {
+			Error struct{ Code, Message string }
+		}
+		if json.Unmarshal(data, &envelope) != nil || envelope.Error.Code != tc.code || (tc.unknown && !strings.Contains(envelope.Error.Message, "unknown")) {
+			t.Fatalf("%s error: %s", tc.id, data)
+		}
+	}
+	if gatewayCalls.Load() != 1 || deniedCalls.Load() != 1 {
+		t.Fatalf("reply requests gateway=%d denied=%d; want one each", gatewayCalls.Load(), deniedCalls.Load())
 	}
 	result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "agent_post_limits", Arguments: map[string]any{}})
 	if err != nil || !result.IsError {

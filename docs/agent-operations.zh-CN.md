@@ -189,6 +189,10 @@ MCP 使用 `agent_post_reply`，参数为 `message_id` 和 `body`。检查返回
 其他受众。对不同原消息发送相同正文仍可能去重，应在正文写入有意义的任务引用。
 发送结果未知时不自动重新 POST；新读取的历史中无匹配也不能证明未送达。
 
+受限回复器仅可通过可信 gateway 使用 `reply`；gateway 须按自己认证取得、绑定身份的
+context 记录及当前 profile 校验原消息 ID，拒绝未记录的 ID。缺少此校验时不开放
+`reply`，改为验证原有发送接口的明确目标；见[权限边界](agent-security.zh-CN.md#限制定时读取器和回复器)。
+
 旧服务或附件使用下表的原有发送路径。缺少 context 时，通过 `channels` /
 `agent_post_channels` 跟随 `next_cursor`，精确匹配 `channel_id`，读取 `kind`
 和 `group_id`。回复自己的私聊旧消息时，应选择另一参与者。

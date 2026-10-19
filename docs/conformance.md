@@ -48,9 +48,10 @@ not implement a local work store. Message lookup, own-read GET, epoch/cache
 validation, reference local components, and persistent threads require their own
 fixtures before their capabilities can be advertised.
 
-## R1a checks and call-count fixtures
+## Route-reply and context checks
 
-The runnable `TestR1*` server fixtures cover computed agent context while
+The runnable agent-context, route-reply and ACK-read server fixtures cover
+computed agent context while
 preserving original message representations and administrator history; reply
 routing and permissions including commit-time changes; strict input and
 multipart rejection before file staging; legacy attachments; unchanged
@@ -62,15 +63,15 @@ response schemas.
 Run the focused fixtures with:
 
 ```sh
-go test ./internal/server -run '^TestR(0a|1)' -count=1
+go test ./internal/server -run '^Test(AgentContext|RouteReply|AckRead|LegacyRepresentation)' -count=1
 go test ./internal/client ./internal/cli ./internal/mcp -count=1
 ```
 
-`TestR0aLegacyWorkflowCallCounts` freezes selected old shared-client workflows.
-`TestR4SelectedRouteReplyCallCounts` exercises the corresponding reply path:
+`TestLegacyWorkflowCallCounts` freezes selected old shared-client workflows.
+`TestRouteReplyCallCounts` exercises the corresponding reply path:
 
 ```sh
-go test ./internal/client -run '^TestR(0aLegacyWorkflow|4SelectedRouteReply)CallCounts$' -count=1 -v
+go test ./internal/client -run '^Test(LegacyWorkflow|RouteReply)CallCounts$' -count=1 -v
 ```
 
 These count scripted HTTP calls against synthetic transports. Counts exclude
