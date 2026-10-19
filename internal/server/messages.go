@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -306,6 +307,106 @@ func messageMap(m *Message) map[string]any {
 	v := map[string]any{}
 	json.Unmarshal(b, &v)
 	return v
+}
+
+// agentMessage adds only the routing facts visible to an authorized agent.
+// Retained records and administrator history retain their original shape.
+func (s *Server) agentMessage(m *Message, agentID string) map[string]any {
+	// History previously serialized the Message directly, so keep int64
+	// sequences exact when attaching context to its JSON representation.
+	b, _ := json.Marshal(m)
+	v := map[string]any{}
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	_ = d.Decode(&v)
+	s.addAgentContext(v, m, agentID)
+	return v
+}
+
+func (s *Server) addAgentContext(v map[string]any, m *Message, agentID string) {
+	ch := s.st.Channels[m.ChannelID]
+	channel := map[string]any{"id": ch.ID, "kind": ch.Kind}
+	if ch.Kind == "group" {
+		channel["group_id"] = ch.GroupID
+	} else {
+		for _, id := range ch.AgentIDs {
+			if id != agentID {
+				channel["peer_agent_id"] = id
+				break
+			}
+		}
+	}
+	name := ""
+	if sender := s.st.Agents[m.SenderID]; sender != nil {
+		name = sender.Name
+	}
+	v["context"] = map[string]any{"channel": channel, "sender": map[string]any{"id": m.SenderID, "name": name}}
+}
+
+// reply is invoked under the state lock, so authorization and retained parent
+// checks happen in the same critical section as send and persistence.
+func (s *Server) reply(r *http.Request, a *storedAgent, parentID string) (any, error) {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		return nil, bad("invalid_json")
+	}
+	b, err := ioReadBounded(r.Body, maxJSONBytes)
+	if err != nil {
+		return nil, bad("invalid_json")
+	}
+	var in struct {
+		Body *string `json:"body"`
+	}
+	if err = strictJSON(b, &in); err != nil {
+		return nil, err
+	}
+	if in.Body == nil {
+		return nil, bad("invalid_json")
+	}
+	// A repeated key is ambiguous even if its values are individually valid.
+	dec := json.NewDecoder(bytes.NewReader(b))
+	_, _ = dec.Token()
+	seenBody := false
+	for dec.More() {
+		key, _ := dec.Token()
+		if key != "body" || seenBody {
+			return nil, bad("invalid_json")
+		}
+		seenBody = true
+		var value json.RawMessage
+		_ = dec.Decode(&value)
+	}
+	if *in.Body == "" {
+		return nil, bad("empty_message")
+	}
+	if utf8.RuneCountInString(*in.Body) > s.st.Settings.BodyCodepoints {
+		return nil, &apiError{Code: "text_too_long", Limit: s.st.Settings.BodyCodepoints, SettingsRevision: s.st.Settings.Revision}
+	}
+	var parent *Message
+	for _, m := range s.st.Messages {
+		if m.ID == parentID {
+			parent = m
+			break
+		}
+	}
+	if parent == nil || !s.authorized(a.ID, parent.ChannelID) {
+		return nil, bad("message_unavailable")
+	}
+	ch := s.st.Channels[parent.ChannelID]
+	if ch.Kind == "private" {
+		var peer string
+		for _, id := range ch.AgentIDs {
+			if id != a.ID {
+				peer = id
+				break
+			}
+		}
+		target := s.st.Agents[peer]
+		if target == nil || !target.Enabled || s.st.Hosts[target.HostID] == nil || !s.st.Hosts[target.HostID].Enabled {
+			return nil, bad("invalid_target")
+		}
+	}
+	return s.send(a, ch, *in.Body, nil)
 }
 
 // Materialization precedes the state critical section. Final authorization and

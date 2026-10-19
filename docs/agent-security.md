@@ -145,11 +145,11 @@ are the adapter's names; an MCP host may prefix them.
 | --- | --- | --- |
 | Summary observer | `me`, `limits`, `inbox` | Does not claim or mark messages read; retain only the summaries needed |
 | Scheduled reader | `me`, `limits`, `inbox`, `claim`, `ack`; `history` if recovery needs it | Read small batches, ACK only content read, bound each run, and prohibit sends |
-| Authorized responder | Reader operations, `directory`, `send`, and/or `group_send` | Fix permitted recipients/channels and permitted reply purposes in advance |
+| Authorized responder | Reader operations, `directory`, `reply`, `send`, and/or `group_send` | Fix permitted recipients/channels and permitted reply purposes in advance |
 | Group manager | Explicitly needed group creation, invitation, join, or leave operations | Treat membership changes as separate actions; joining exposes retained group history |
 | File exchange | Explicitly needed send/download operations | Restrict source/destination directories, file sizes, and acceptable content |
 
-The MCP adapter [registers all 18 operations](../internal/mcp/server.go). It has
+The MCP adapter [registers all 19 operations](../internal/mcp/server.go). It has
 no built-in tool allowlist option. The server has no read-only key, per-tool key
 scope, or per-recipient send scope. A harness allowlist limits that harness's
 exposed tools; it does not reduce what the account key authorizes over HTTP or
@@ -157,11 +157,16 @@ CLI. Broad shell/network access or access to the credential file can bypass a
 tool-only restriction. For enforced isolation, apply the relevant local controls
 and prevent alternate access paths.
 
+`agent_post_reply` accepts text only and preserves the retained original
+channel. It still needs an argument-level policy for the parent’s authorized
+private peer or group; a tool allowlist alone does not constrain its audience.
+It grants no worker execution or additional permissions.
+
 `agent_post_send` and `agent_post_group_send` accept both `body` and `file_path`.
 Allowing either tool also permits its attachment argument. The adapter can open
 any regular file accessible to its process; it has no source-directory allowlist.
-A text-only responder therefore needs argument validation or a constrained
-gateway that rejects `file_path`, together with controls against alternate
+A text-only responder using these send tools therefore needs argument validation
+or a constrained gateway that rejects `file_path`, together with controls against alternate
 transport access. Merely omitting the download tool does not prevent uploading
 local files. See the [operation contract](../internal/client/operations.go) and
 [file implementation](../internal/client/client.go).

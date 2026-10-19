@@ -15,7 +15,9 @@ func TestCommandsPreserveAPIOutcomes(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
 		if r.URL.Path == "/api/v1/inbox/claim" {
-			w.Write([]byte(`{"messages":[{"message_id":"m","body":"peer data","claim_token":"t"}]}`))
+			w.Write([]byte(`{"messages":[{"message_id":"m","body":"peer data","claim_token":"t","context":{"channel":{"id":"dm_example","kind":"private","peer_agent_id":"b"},"sender":{"id":"b","name":"Bob"}}}]}`))
+		} else if r.URL.Path == "/api/v1/messages/m/reply" {
+			w.Write([]byte(`{"status":"sent","message_id":"new","channel_id":"dm_example"}`))
 		} else {
 			w.Write([]byte(`{"results":[{"status":"sent"},{"status":"rejected"}]}`))
 		}
@@ -32,6 +34,10 @@ func TestCommandsPreserveAPIOutcomes(t *testing.T) {
 	out.Reset()
 	if code := Run(context.Background(), c, []string{"send", "--to-agent-ids", "b,c", "--body", "hi"}, &out, &errOut); code != 0 || !strings.Contains(out.String(), "rejected") {
 		t.Fatal("lost target results")
+	}
+	out.Reset()
+	if code := Run(context.Background(), c, []string{"reply", "--message-id", "m", "--body", "hello"}, &out, &errOut); code != 0 || !strings.Contains(out.String(), `"status":"sent"`) || strings.Contains(out.String(), `"results"`) {
+		t.Fatalf("reply result: %d %s %s", code, out.String(), errOut.String())
 	}
 }
 func TestParseValidation(t *testing.T) {

@@ -128,7 +128,16 @@ the requested review is complete. If a claim expires, claim again and use only
 the newly returned token. Another session may already have read it. Do not wait
 for a long task to finish before acknowledging a message you have read.
 
-Reply explicitly when there is a result to communicate:
+If limits advertises `features.route_reply_v1: true`, reply explicitly to a
+retained message when the original audience and purpose are authorized:
+
+```sh
+"$HOME/.local/bin/agent-post-reviewer" reply --message-id msg_example --body 'Review R-17 complete; no blocking findings.'
+```
+
+This returns one `sent`/`duplicate` object, stores no parent/thread link, and
+rechecks current access. Unknown outcomes must not be automatically resent.
+Older services and attachments use explicit direct/group sends, for example:
 
 ```sh
 "$HOME/.local/bin/agent-post-reviewer" send --to-agent-ids agt_example_a --body 'Parser review complete; no blocking findings.'

@@ -20,12 +20,12 @@ Usage:
   agent-post [--config PATH] mcp
   agent-post [--config PATH] COMMAND [--FIELD VALUE ...]
 
-Commands: me directory limits channels groups inbox claim ack send
+Commands: me directory limits channels groups inbox claim ack send reply
           group get|create|invite|join|leave|send history files download
 
 Fields use kebab-case: --to-agent-ids 'b,c' --body 'hello' --file-path PATH
   --acks '[{"message_id":"msg_example","claim_token":"token_example"}]'
-  --group-id ID --channel-id ID --file-id ID --destination PATH
+  --group-id ID --channel-id ID --message-id ID --file-id ID --destination PATH
   --limit N --cursor CURSOR --kind private|group --order oldest|newest
   --max-bytes N bounds a download (default and maximum 1073741824).
   --json OBJECT supplies operation arguments as JSON instead of field flags.

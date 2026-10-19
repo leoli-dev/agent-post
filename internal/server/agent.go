@@ -46,7 +46,7 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 		return a.Agent, nil
 	}
 	if p == "limits" && r.Method == "GET" {
-		b := map[string]any{"settings": s.st.Settings, "deduplication": "latest retained sender/channel message; exact content; no time window; no fallback after purge", "attachment_deletion": "whole message and file deleted together", "retention_order": "oldest first", "rate_limit": nil, "total_storage_limit": nil}
+		b := map[string]any{"settings": s.st.Settings, "deduplication": "latest retained sender/channel message; exact content; no time window; no fallback after purge", "attachment_deletion": "whole message and file deleted together", "retention_order": "oldest first", "rate_limit": nil, "total_storage_limit": nil, "features": map[string]bool{"message_context_v1": true, "route_reply_v1": true, "ack_read_v1": true}}
 		return b, nil
 	}
 	if p == "directory" && r.Method == "GET" {
@@ -109,6 +109,9 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 		return s.ack(r, a)
 	}
 	parts := strings.Split(p, "/")
+	if len(parts) == 3 && parts[0] == "messages" && parts[2] == "reply" && r.Method == "POST" {
+		return s.reply(r, a, parts[1])
+	}
 	if len(parts) == 3 && parts[0] == "channels" && r.Method == "GET" {
 		ch := parts[1]
 		if !s.authorized(a.ID, ch) {
@@ -117,7 +120,15 @@ func (s *Server) agent(w http.ResponseWriter, r *http.Request, a *storedAgent) (
 		if parts[2] != "messages" && parts[2] != "files" {
 			return nil, bad("not_found")
 		}
-		return s.history(r, ch, parts[2] == "files")
+		result, err := s.history(r, ch, parts[2] == "files")
+		if err != nil || parts[2] == "files" {
+			return result, err
+		}
+		page := result.(map[string]any)
+		for i, m := range page["messages"].([]any) {
+			page["messages"].([]any)[i] = s.agentMessage(m.(*Message), a.ID)
+		}
+		return page, nil
 	}
 	if len(parts) == 3 && parts[0] == "files" && parts[2] == "content" && r.Method == "GET" {
 		for _, m := range s.st.Messages {
@@ -282,6 +293,7 @@ func (s *Server) claim(r *http.Request, a *storedAgent) (any, error) {
 		d.Token = digest(token)
 		d.Expires = s.now().Add(time.Duration(s.st.Settings.ClaimSeconds) * time.Second).UTC()
 		v := messageMap(m)
+		s.addAgentContext(v, m, a.ID)
 		v["claim_token"] = token
 		v["claim_expires_at"] = d.Expires
 		out = append(out, v)
@@ -316,7 +328,11 @@ func (s *Server) ack(r *http.Request, a *storedAgent) (any, error) {
 		} else {
 			d.Read = true
 		}
-		out = append(out, map[string]any{"message_id": v.MessageID, "status": code})
+		var read any
+		if d != nil {
+			read = d.Read
+		}
+		out = append(out, map[string]any{"message_id": v.MessageID, "status": code, "read": read})
 	}
 	return map[string]any{"results": out}, nil
 }

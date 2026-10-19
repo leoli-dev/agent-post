@@ -373,3 +373,64 @@ scheduled reply, or live third-party integration was executed in this review.
 Those require commissioning from the actual scheduled context as described in
 the [operating manual](agent-operations.md#6-commission-and-stop-the-integration).
 No new platform-support, security-audit, release, or benchmark claim is made.
+
+## Agent route conveniences and workflow fixtures
+
+Local checks on **2026-10-19** used Go 1.26.3 on macOS arm64, synthetic
+identities, temporary service state and loopback HTTP. The candidate was a
+working-tree change based on `54e58cc`; this is source-change evidence, not a
+production deployment or release. The [runtime contract](runtime.md#agent-route-conveniences)
+and [conformance specification](conformance.md) describe the delivered scope.
+
+- Focused server fixtures passed agent-only context, original message field
+  values and timestamp/attachment representations, unchanged administrator
+  history, schema 1, private and group route replies, own-private-message
+  routing, independent fan-out visibility, active disabled group-member
+  delivery, retention and current-comparison deduplication, and nullable ACK
+  read with unchanged token/deadline fencing. They also cover parent purge,
+  leave and private-target changes before commit, source-IP rejection,
+  strict JSON/Unicode input, save-failure rollback, zero multipart-body reads
+  and zero staged files for rejected replies, and legacy direct/group uploads.
+- Final `go test -race -count=1 ./...` passed every package; the server suite
+  took 219.843 seconds. `go vet ./...`, `go build ./...`, all four Node i18n
+  tests, documentation checks, gofmt, generated OpenAPI equality and diff
+  whitespace checks also passed.
+- Focused race tests passed for server/client/CLI/MCP changes. An earlier run
+  found a race in the new test's gated-reader synchronization; `sync.Once`
+  corrected the fixture and its rerun passed. This was a test defect, not
+  evidence of a production state-lock race.
+- `python3 scripts/smoke.py` passed against the real temporary executable and
+  service, including HTTP context/features/ACK read, HTTP/CLI/MCP single-object
+  route replies, original transport/attachment checks, and graceful restart.
+- A separate temporary harness built the actual pre-change CLI/MCP executable
+  from `54e58cc` with `git archive` and `go build`, then connected it to the
+  new isolated service. Its CLI limits/claim/ACK/history and original 18-tool
+  MCP limits/history successfully parsed the additive response fields. This
+  verifies those original open response parsers, not arbitrary third-party
+  closed schemas. No production helper or configuration was loaded or changed.
+
+The executed `TestR0aLegacyWorkflowCallCounts` and
+`TestR4SelectedRouteReplyCallCounts` use scripted shared-client calls and
+synthetic transports:
+
+| Selected workflow, after bootstrap | Legacy calls | Reply-path calls |
+| --- | ---: | ---: |
+| Known private parent, enumerate channel then send | 2 | 1 |
+| Known group parent, enumerate channel then send | 2 | 1 |
+| Quiet inbox check | 1 | Unchanged; no quiet-cache feature implemented |
+| Truncated send response, then one fresh history read | 2 | 2; no automatic re-POST |
+
+These are observations of the chosen scripts, not universal lower bounds.
+A known private recipient already allows one raw direct send. Counts exclude
+bootstrap, helpers, scheduler/model invocations, wall-clock latency and
+O(retained-state) service costs. A history miss cannot establish that a lost
+send was never committed. No true old/new collaboration comparison, wakeup,
+handoff, acceptance, or maintenance-cost benefit was measured.
+
+R0b actual-profile pilots, actual-context/scheduled-peer evidence, production
+helper measurements, and local durable-work/outbox/harness profiles remain
+**NOT_TESTED** here. R1b lookup/own-read/probe metadata, a reference local
+component and persistent threads are not delivered. The doctor section is a
+specification, not an implemented command. No adopter or migration/deployment
+policy is inferred from passing fixtures, and no new platform, performance,
+or release claim is made.

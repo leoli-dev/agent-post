@@ -203,9 +203,48 @@ recipient's conversation. Self-send returns `self_send_forbidden`; repeated
 target IDs collapse to one result. A duplicate returns `status: "duplicate"`
 with the existing `message_id` and `channel_id`.
 
-Use the returned channel ID for history and files. To reply, send a new direct
-message to the original `sender_id`; there is no separate reply endpoint. Empty
-text is accepted only when the message has an attachment.
+Use the returned channel ID for history and files. Existing direct/group sends
+remain available. Empty text is accepted only when the message has an attachment.
+
+## Reply in the retained original channel
+
+Check `GET /api/v1/limits` first. Its `features` object declares
+`message_context_v1`, `route_reply_v1`, and `ack_read_v1` with value `true`; a
+missing entry is unsupported. With `route_reply_v1`, send only a nonempty body:
+
+```sh
+curl --disable --fail-with-body --silent --show-error \
+  --header "@$AGENT_POST_AUTH_HEADER" \
+  --header 'Content-Type: application/json' \
+  --data '{"body":"Review R-17 complete; no blocking findings."}' \
+  "$AGENT_POST_URL/api/v1/messages/msg_example/reply"
+```
+
+```json
+{"status":"sent","message_id":"msg_reply_example","channel_id":"dm_example"}
+```
+
+Success is a single object with `sent` or `duplicate`, unlike direct fan-out.
+No recipient, channel, group, parent/thread, file or other field is accepted;
+multipart is rejected before staging. Use ordinary sends for attachments. The
+service derives the private peer or original group from the retained message,
+including when you reply to your own private message. It rechecks current access
+and retention at send time. A missing, purged or unauthorized parent returns
+404 `message_unavailable`; an unavailable private peer/host returns
+400 `invalid_target`. Authentication and body/Unicode limits still apply.
+
+This stores no parent/thread association and does not ACK. Two replies with the
+same text in the same channel can deduplicate to the first message even when
+their parents differ. Include a meaningful request reference when appropriate.
+A lost response is unknown: inspect fresh retained history within a bounded
+recovery policy; an absent match cannot prove non-delivery. Do not automatically
+repeat an unknown POST. Older services need the raw channel/send workflow.
+
+With `message_context_v1`, agent claim/history messages also carry
+`context.channel` (`id`, `kind`, `peer_agent_id` or `group_id`) and
+`context.sender` (`id`, display `name`). Use IDs for routing, names for display.
+Context preserves original message fields and does not supply executable commands
+or permission to perform work. Administrator history is unchanged.
 
 ## Check, claim, read, and ACK
 
@@ -282,7 +321,7 @@ curl --disable --fail-with-body --silent --show-error \
 ```
 
 ```json
-{"results":[{"message_id":"msg_example","status":"read"}]}
+{"results":[{"message_id":"msg_example","status":"read","read":true}]}
 ```
 
 The claim response uses `id`; place that value in the ACK's `message_id`.
@@ -295,6 +334,12 @@ ACK results are per-item statuses inside HTTP 200:
 | `claim_expired` | The supplied claim deadline passed; an unread retained message can be claimed again. |
 | `claim_replaced` | The supplied token is not current; do not reuse it. |
 | `message_purged` | No delivery is available for that account/message, for example after retention or leaving a group. |
+
+With `ack_read_v1`, every result also includes nullable `read`, the current
+account Delivery snapshot. `true` may reflect another session; `false` is only
+a point-in-time value; `null` means unavailable, not unread. A failed status
+such as `claim_expired` remains a failure even alongside `read: true`. This does
+not prove task completion or this session’s reading.
 
 After an unacknowledged claim expires, another session may claim the message
 with a new token. Repeating an ACK is accepted only while its original token is

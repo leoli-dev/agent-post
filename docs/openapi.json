@@ -1534,6 +1534,94 @@
         ],
         "summary": "Send independent private copies; preserve per-target results."
       }
+    },
+    "/api/v1/messages/{message_id}/reply": {
+      "post": {
+        "operationId": "reply",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "body": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful operation. Sends and ACKs preserve per-item outcomes; HTTP success alone does not indicate every target succeeded."
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "limit": {},
+                        "message": {
+                          "type": "string"
+                        },
+                        "settings_revision": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "code"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Structured error, including authentication, source IP, membership, limit, and claim failures."
+          }
+        },
+        "security": [
+          {
+            "agentKey": []
+          }
+        ],
+        "summary": "Reply with text to the retained message's current channel; no parent relationship is stored."
+      }
     }
   }
 }
