@@ -37,7 +37,7 @@ func checkError(t *testing.T, status int, got map[string]any, wantStatus int, co
 	}
 }
 
-func TestR1CompatibilityAndAgentContext(t *testing.T) {
+func TestAgentContextPreservesLegacyFieldsAndAdminHistory(t *testing.T) {
 	f := setup(t)
 	f.upload([]byte("synthetic attachment"), []string{f.ids["bob"]})
 	m := f.s.st.Messages[0]
@@ -89,7 +89,7 @@ func TestR1CompatibilityAndAgentContext(t *testing.T) {
 	}
 }
 
-func TestR1ReplyRoutingAndRetention(t *testing.T) {
+func TestRouteReplyRoutingAndRetention(t *testing.T) {
 	f := setup(t)
 	first := oneResult(t, f.send("parent one", f.ids["bob"]))
 	second := oneResult(t, f.send("parent two", f.ids["bob"]))
@@ -142,7 +142,7 @@ func TestR1ReplyRoutingAndRetention(t *testing.T) {
 	checkError(t, status, out, 404, "message_unavailable")
 }
 
-func TestR1GroupReplyPermissionAndContext(t *testing.T) {
+func TestRouteReplyGroupPermissionAndContext(t *testing.T) {
 	f := setup(t)
 	group := f.must("POST", "/api/v1/groups", f.keys["alice"], map[string]any{"name": "team", "invitee_ids": []string{f.ids["bob"]}})["channel_id"].(string)
 	parent := f.must("POST", "/api/v1/groups/"+group+"/messages", f.keys["alice"], map[string]any{"body": "before"})["message_id"].(string)
@@ -171,7 +171,7 @@ func TestR1GroupReplyPermissionAndContext(t *testing.T) {
 	}
 }
 
-func TestR1ReplyInputAndAttachmentPreprocessing(t *testing.T) {
+func TestRouteReplyInputAndAttachmentPreprocessing(t *testing.T) {
 	f := setup(t)
 	parent := oneResult(t, f.send("parent", f.ids["bob"]))["message_id"].(string)
 	path := "/api/v1/messages/" + parent + "/reply"
@@ -263,7 +263,7 @@ func TestR1ReplyInputAndAttachmentPreprocessing(t *testing.T) {
 	}
 }
 
-func TestR1AckReadPreservesFencingOrder(t *testing.T) {
+func TestAckReadPreservesFencingOrder(t *testing.T) {
 	f := setup(t)
 	parent := oneResult(t, f.send("one", f.ids["bob"]))["message_id"].(string)
 	claim := f.must("POST", "/api/v1/inbox/claim", f.keys["bob"], map[string]any{})["messages"].([]any)[0].(map[string]any)
@@ -321,7 +321,7 @@ func (g *gatedReader) Read(p []byte) (int, error) {
 	return g.body.Read(p)
 }
 
-func TestR1ReplyRechecksAtCommit(t *testing.T) {
+func TestRouteReplyRechecksAtCommit(t *testing.T) {
 	for _, scenario := range []string{"purge", "leave", "disabled_target"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := setup(t)
@@ -369,7 +369,7 @@ func TestR1ReplyRechecksAtCommit(t *testing.T) {
 	}
 }
 
-func TestR1ReplyPurgeAndSourceIP(t *testing.T) {
+func TestRouteReplyPurgeAndSourceIP(t *testing.T) {
 	f := setup(t)
 	parent := oneResult(t, f.send("a", f.ids["bob"]))["message_id"].(string)
 	path := "/api/v1/messages/" + parent + "/reply"
@@ -395,7 +395,7 @@ func TestR1ReplyPurgeAndSourceIP(t *testing.T) {
 	checkError(t, w.Code, out, 403, "source_ip_denied")
 }
 
-func TestR0aLegacyRepresentationFreeze(t *testing.T) {
+func TestLegacyRepresentationFreeze(t *testing.T) {
 	f := setup(t)
 	f.s.now = func() time.Time { return time.Date(2025, 1, 2, 3, 4, 5, 123000000, time.UTC) }
 	// Exercise integer representation beyond the exact float64 range.
@@ -432,7 +432,7 @@ func TestR0aLegacyRepresentationFreeze(t *testing.T) {
 	}
 }
 
-func TestR1AckConcurrentSessions(t *testing.T) {
+func TestAckReadConcurrentSessions(t *testing.T) {
 	f := setup(t)
 	parent := oneResult(t, f.send("hello", f.ids["bob"]))["message_id"].(string)
 	message := f.must("POST", "/api/v1/inbox/claim", f.keys["bob"], map[string]any{})["messages"].([]any)[0].(map[string]any)
@@ -468,7 +468,7 @@ func TestR1AckConcurrentSessions(t *testing.T) {
 	}
 }
 
-func TestR1ReplyRollbackOnSaveFailure(t *testing.T) {
+func TestRouteReplyRollbackOnSaveFailure(t *testing.T) {
 	f := setup(t)
 	parent := oneResult(t, f.send("parent", f.ids["bob"]))["message_id"].(string)
 	before, _ := json.Marshal(f.s.st)
@@ -489,7 +489,7 @@ func TestR1ReplyRollbackOnSaveFailure(t *testing.T) {
 	}
 }
 
-func TestR1FanoutContextPrivacyAndGroupDelivery(t *testing.T) {
+func TestAgentContextFanoutPrivacyAndGroupDelivery(t *testing.T) {
 	f := setup(t)
 	results := f.send("fanout", f.ids["bob"], f.ids["carol"])["results"].([]any)
 	for i, name := range []string{"bob", "carol"} {

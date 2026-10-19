@@ -3,10 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"github.com/leoli-dev/agent-post/internal/client"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -38,6 +40,48 @@ func TestCommandsPreserveAPIOutcomes(t *testing.T) {
 	out.Reset()
 	if code := Run(context.Background(), c, []string{"reply", "--message-id", "m", "--body", "hello"}, &out, &errOut); code != 0 || !strings.Contains(out.String(), `"status":"sent"`) || strings.Contains(out.String(), `"results"`) {
 		t.Fatalf("reply result: %d %s %s", code, out.String(), errOut.String())
+	}
+}
+
+func TestReplyUnknownOutcomeVisible(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		status     int
+		body, code string
+		unknown    bool
+	}{
+		{"gateway", 502, `{"error":{"code":"storage_unavailable"}}`, "client_error", true},
+		{"definite_service_error", 403, `{"error":{"code":"source_ip_denied"}}`, "source_ip_denied", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var count atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				count.Add(1)
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			c, _ := client.New(client.Config{URL: server.URL, APIKey: "test"})
+			var out, errOut bytes.Buffer
+			if exit := Run(context.Background(), c, []string{"reply", "--message-id", "msg_example", "--body", "hello"}, &out, &errOut); exit != 1 {
+				t.Fatalf("exit %d: %s %s", exit, out.String(), errOut.String())
+			}
+			var result struct {
+				Error struct{ Code, Message string }
+			}
+			if err := json.Unmarshal(out.Bytes(), &result); err != nil || result.Error.Code != tc.code {
+				t.Fatalf("error output %s: %v", out.String(), err)
+			}
+			if tc.unknown && (!strings.Contains(result.Error.Message, "unknown") || !strings.Contains(errOut.String(), "unknown")) {
+				t.Fatalf("uncertainty not visible: %s %s", out.String(), errOut.String())
+			}
+			if !tc.unknown && strings.TrimSpace(out.String()) != tc.body {
+				t.Fatalf("service payload changed: %s", out.String())
+			}
+			if count.Load() != 1 {
+				t.Fatalf("reply requests = %d; want 1", count.Load())
+			}
+		})
 	}
 }
 func TestParseValidation(t *testing.T) {

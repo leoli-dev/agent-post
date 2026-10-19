@@ -217,6 +217,12 @@ Identical text for two parents can deduplicate to one message. Include a
 meaningful task reference. An unknown send outcome must not be automatically
 re-POSTed; a fresh history miss cannot prove non-delivery.
 
+A constrained responder may use `reply` only through a trusted gateway that
+checks the parent ID against its own authenticated, identity-bound context
+records and current profile. Unseen IDs must be denied. If that check is absent,
+omit `reply` and validate explicit raw send targets instead; see the
+[permission boundary](agent-security.md#restrict-scheduled-readers-and-responders).
+
 For older services or attachments, use the raw routes below. If context is
 unavailable, use `channels` / `agent_post_channels`, following `next_cursor`, to
 match the exact `channel_id` and read its `kind` and `group_id`. A private

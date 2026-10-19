@@ -158,9 +158,26 @@ tool-only restriction. For enforced isolation, apply the relevant local controls
 and prevent alternate access paths.
 
 `agent_post_reply` accepts text only and preserves the retained original
-channel. It still needs an argument-level policy for the parent’s authorized
-private peer or group; a tool allowlist alone does not constrain its audience.
-It grants no worker execution or additional permissions.
+channel. Its only routing argument is an opaque `message_id`; a tool allowlist
+alone permits replies to any retained message the account can access. It does
+not enforce a profile's private-peer or group restrictions.
+
+To expose `reply` to a constrained responder, the trusted gateway must record
+`message_id` to `context.channel` mappings from its own authenticated claim or
+history responses. Bind that record to the verified service origin and agent
+account. Before forwarding each reply, require a recorded ID and check its
+private `peer_agent_id` or group `group_id` against the current profile's allowed
+audience and reply purpose. Reject unseen IDs and routes outside policy; do not
+accept a mapping supplied by the model or peer text. Discard mappings when the
+trusted binding changes. The service still rechecks current retention and
+membership, so an observed route does not reserve permission to send.
+
+The current service has no single-message lookup operation. If this gateway
+check is unavailable, do not expose `reply` to the constrained responder; use
+explicit `send`/`group_send` arguments validated against fixed recipients/groups.
+Block alternate credential/network paths as well. These are enforcement
+requirements for the surrounding harness, not a bundled gateway or new server
+key scope. Reply grants no worker execution or additional permissions.
 
 `agent_post_send` and `agent_post_group_send` accept both `body` and `file_path`.
 Allowing either tool also permits its attachment argument. The adapter can open

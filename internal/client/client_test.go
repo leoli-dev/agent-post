@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -84,6 +86,80 @@ func TestTransportAndStreaming(t *testing.T) {
 		t.Fatalf("lost API error: %s %v", raw, e)
 	}
 }
+
+func TestReplyErrorClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		status   int
+		body     string
+		definite bool
+	}{
+		{"gateway_502_service_envelope", 502, `{"error":{"code":"storage_unavailable"}}`, false},
+		{"gateway_504_service_envelope", 504, `{"error":{"code":"internal_error"}}`, false},
+		{"gateway_502_other_json", 502, `{"message":"bad gateway"}`, false},
+		{"other_status_arbitrary_object", 503, `{"message":"unavailable"}`, false},
+		{"null", 400, `null`, false},
+		{"array", 400, `[]`, false},
+		{"string", 400, `"error"`, false},
+		{"missing_error", 400, `{}`, false},
+		{"null_error", 400, `{"error":null}`, false},
+		{"empty_code", 400, `{"error":{"code":""}}`, false},
+		{"null_code", 400, `{"error":{"code":null}}`, false},
+		{"numeric_code", 400, `{"error":{"code":123}}`, false},
+		{"duplicate_code_ending_null", 400, `{"error":{"code":"unauthorized","code":null}}`, false},
+		{"duplicate_error_ending_empty", 400, `{"error":{"code":"unauthorized"},"error":{}}`, false},
+		{"truncated_error_json", 400, `{"error":`, false},
+		{"truncated_success_json", 200, `{"status":"sent"`, false},
+		{"malformed_success_object", 200, `{"status":"sent"}`, false},
+		{"unauthorized", 401, `{"error":{"code":"unauthorized"}}`, true},
+		{"source_denied", 403, `{"error":{"code":"source_ip_denied"}}`, true},
+		{"message_unavailable", 404, `{"error":{"code":"message_unavailable"}}`, true},
+		{"invalid_target", 400, `{"error":{"code":"invalid_target"}}`, true},
+		{"save_failure", 500, `{"error":{"code":"internal_error","message":"operation could not be persisted"}}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var count atomic.Int32
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				count.Add(1)
+				if r.Method != http.MethodPost || r.URL.Path != "/api/v1/messages/msg_example/reply" {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				}
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			defer s.Close()
+			c, _ := New(Config{s.URL, "test-key"})
+			op, _ := FindOperation("reply")
+			raw, err := c.Execute(context.Background(), op, map[string]any{"message_id": "msg_example", "body": "hello"})
+			var apiErr *APIError
+			if tc.definite {
+				if !errors.As(err, &apiErr) || apiErr.Status != tc.status || string(raw) != tc.body || string(apiErr.Payload) != tc.body {
+					t.Fatalf("lost service error: %s %v", raw, err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), "unknown") || len(raw) != 0 || errors.As(err, &apiErr) {
+				t.Fatalf("outcome not marked unknown: %s %v", raw, err)
+			}
+			if count.Load() != 1 {
+				t.Fatalf("reply requests = %d; want 1", count.Load())
+			}
+		})
+	}
+}
+
+func TestLegacySendErrorClassificationUnchanged(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, `{"message":"gateway error"}`)
+	}))
+	defer s.Close()
+	c, _ := New(Config{s.URL, "test-key"})
+	op, _ := FindOperation("send")
+	raw, err := c.Execute(context.Background(), op, map[string]any{"to_agent_ids": []any{"bob"}, "body": "hello"})
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != 502 || string(raw) != `{"message":"gateway error"}` {
+		t.Fatalf("legacy send result changed: %s %v", raw, err)
+	}
+}
 func TestRedirectDoesNotLeakKey(t *testing.T) {
 	hit := false
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = true }))
@@ -120,7 +196,7 @@ func TestConfigValidation(t *testing.T) {
 
 // The fixture counts only these explicitly scripted legacy client workflows.
 // It does not measure a scheduler, model turns, production helpers or latency.
-func TestR0aLegacyWorkflowCallCounts(t *testing.T) {
+func TestLegacyWorkflowCallCounts(t *testing.T) {
 	var calls []string
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
@@ -243,8 +319,8 @@ func TestReplyStandaloneResultParser(t *testing.T) {
 	}
 }
 
-// This is the corresponding scripted R1 route, not an actual collaboration pilot.
-func TestR4SelectedRouteReplyCallCounts(t *testing.T) {
+// This is the corresponding scripted reply route, not an actual collaboration pilot.
+func TestRouteReplyCallCounts(t *testing.T) {
 	var calls []string
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.Path)

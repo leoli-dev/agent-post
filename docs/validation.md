@@ -409,8 +409,8 @@ and [conformance specification](conformance.md) describe the delivered scope.
   verifies those original open response parsers, not arbitrary third-party
   closed schemas. No production helper or configuration was loaded or changed.
 
-The executed `TestR0aLegacyWorkflowCallCounts` and
-`TestR4SelectedRouteReplyCallCounts` use scripted shared-client calls and
+The executed `TestLegacyWorkflowCallCounts` and
+`TestRouteReplyCallCounts` use scripted shared-client calls and
 synthetic transports:
 
 | Selected workflow, after bootstrap | Legacy calls | Reply-path calls |
@@ -427,10 +427,38 @@ O(retained-state) service costs. A history miss cannot establish that a lost
 send was never committed. No true old/new collaboration comparison, wakeup,
 handoff, acceptance, or maintenance-cost benefit was measured.
 
-R0b actual-profile pilots, actual-context/scheduled-peer evidence, production
+Actual-profile pilots, actual-context/scheduled-peer evidence, production
 helper measurements, and local durable-work/outbox/harness profiles remain
-**NOT_TESTED** here. R1b lookup/own-read/probe metadata, a reference local
+**NOT_TESTED** here. Lookup/own-read/probe metadata, a reference local
 component and persistent threads are not delivered. The doctor section is a
 specification, not an implemented command. No adopter or migration/deployment
 policy is inferred from passing fixtures, and no new platform, performance,
 or release claim is made.
+
+## Reply gateway-error and policy follow-up
+
+Local checks on **2026-10-19**, for the client and documentation changes after
+`69d91f6`, passed `go test -race ./internal/client ./internal/cli ./internal/mcp
+-count=1`, the renamed agent-context/route-reply/ACK-read/legacy-representation
+server fixtures, `go vet ./...`, and `python3 scripts/smoke.py`. Documentation,
+Go formatting, generated OpenAPI equality and whitespace checks also passed.
+No server runtime behavior changed in this follow-up; its tests were renamed
+from internal phase labels to public behavior names.
+
+Synthetic error fixtures cover service-shaped JSON 502/504, other non-service
+JSON and malformed error envelopes, truncated responses, and definite service
+400/401/403/404/500 errors. CLI and MCP checks verify that uncertain reply
+outcomes remain visibly unknown with one POST per call; recognized service
+rejections retain their payloads. These are gateway-response simulations, not
+an actual reverse-proxy deployment or permission-boundary certification. The
+security guides and skill now describe the trusted, identity-bound context
+mapping required before exposing opaque-ID reply to a constrained responder;
+no gateway implementation was added.
+
+For the preceding revision `69d91f6`, the hosted
+[application checks](https://github.com/leoli-dev/agent-post/actions/runs/39307613262)
+passed native Linux/macOS/Windows build/vet/race jobs, the generated-contract
+and real-service smoke job, and the Chromium administration job. Its
+[documentation checks](https://github.com/leoli-dev/agent-post/actions/runs/39307613072)
+also passed. Those results apply to that revision; they do not establish the
+follow-up revision's hosted result or a new release/platform support claim.
